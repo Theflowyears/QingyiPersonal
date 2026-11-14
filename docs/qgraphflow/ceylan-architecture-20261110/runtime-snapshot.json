@@ -1,0 +1,107 @@
+{
+  "observed_date": "2026-11-10",
+  "origin": "read_only_ssh_production_probe",
+  "note": "运行快照不是永久状态，也不是心理测量或意识证明。未收录消息正文、QQ号、密钥或登录态。",
+  "service": {
+    "qqbot": "active",
+    "onebot_connected": true,
+    "onebot_endpoint": "ws://127.0.0.1:3001"
+  },
+  "shadow": {
+    "run_version": "shadow-v2",
+    "running": true,
+    "expression_control": false,
+    "stage3_ready": false,
+    "ready_for_review": true,
+    "processed": 1778,
+    "cursor": 3082,
+    "backlog_pending": 0,
+    "parameter_hash": "8cee52d854cf7e36b3c44acc0f9cc53f6bd07be9e04e79970d65440facc94626",
+    "baseline": {
+      "valence": 0.0,
+      "arousal": 0.25,
+      "control": 0.5,
+      "attention": 0.0
+    },
+    "tau_seconds": {
+      "valence": 7200,
+      "arousal": 1800,
+      "control": 3600,
+      "attention": 600
+    }
+  },
+  "independent_valence_replay": {
+    "mode": "candidate_integrated_replay",
+    "rule_version": "valence-integration-v1",
+    "counts_for_live": false,
+    "expression_control": false,
+    "total": 1416,
+    "included": 24,
+    "excluded": 1392
+  },
+  "unchanged_live_settings": {
+    "GROUP_AUTO_REPLY_COOLDOWN": 6,
+    "GROUP_AUTO_REPLY_DEBOUNCE": 2,
+    "GROUP_AUTO_REPLY_ENABLED": true,
+    "GROUP_AUTO_REPLY_EVERY": 3,
+    "GROUP_AUTO_REPLY_FORCE": 5,
+    "GROUP_AUTO_REPLY_MIN_HUMAN": 1,
+    "GROUP_AUTO_REPLY_PROB": 0.9,
+    "reply_tokens": 150,
+    "reply_chars": 45,
+    "bubbles": 3,
+    "delay_ms": 700
+  },
+  "settings_sha256_before_and_after": "4333a4df0ebb270ca2f7a65cf191023ded42db3f91921177706f59eefa7558f2",
+  "readiness": {
+    "pass": 7,
+    "not_observed": 5,
+    "authorizes_expression": false
+  },
+  "verification": {
+    "local_tests_run": 1715,
+    "local_skipped": 42,
+    "local_failures": 0,
+    "local_errors": 0,
+    "production_related_tests_run": 69,
+    "production_related_failures": 0,
+    "engineering_contract_groups_passed": 5,
+    "frequency_functions_same_interpreter_ast_equal": true,
+    "changed_files_remote_local_sha256_equal": true,
+    "browser_visual_acceptance": "not_performed_connector_not_connected",
+    "live_end_to_end_qq_replay": "not_performed_no_unsolicited_messages_sent"
+  },
+  "deployed_input_replay": {
+    "local_affection_query": {
+      "local": true,
+      "web_search": false,
+      "intent": "chat"
+    },
+    "external_game_affection_query": {
+      "local": false,
+      "web_search": true,
+      "intent": "request"
+    },
+    "mixed_external_query": {
+      "local": false,
+      "web_search": true,
+      "intent": "request"
+    },
+    "repeated_opener_removed_without_network_or_model_call": true
+  },
+  "diagram_validation": {
+    "diagrams": 12,
+    "nodes": 115,
+    "edges": 113,
+    "groups": 7,
+    "source_refs_checked": 217,
+    "source_files": 40,
+    "sited_relations": 106,
+    "eligible_relations": 106,
+    "semantic": "passed",
+    "geometry": "passed",
+    "browser_rendering": "not_checked"
+  },
+  "latest_rollback_snapshot": "/root/pre-context-routing-20261110-124355",
+  "original_rollback_snapshot": "/root/pre-context-routing-20261110-122914"
+}

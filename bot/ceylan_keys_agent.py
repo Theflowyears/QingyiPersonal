@@ -18,9 +18,9 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from ceylan_keys_common import digest, label, validate
 from project_config import api_url
 
-ROOT = Path(os.getenv('CEYLAN_KEYS_DIR', '/root/openclaw-qq/keys-v5'))
+ROOT = Path(os.getenv('CEYLAN_KEYS_DIR', './data/keys-v5'))
 CONFIG = Path(os.getenv('CEYLAN_OPENCLAW_CONFIG', '/home/ubuntu/.openclaw/openclaw.json'))
-ENV = Path(os.getenv('CEYLAN_MODEL_ENV', '/root/openclaw-qq/model.env'))
+ENV = Path(os.getenv('CEYLAN_MODEL_ENV', './data/model.env'))
 
 
 class Refused(ValueError):
@@ -55,7 +55,7 @@ def read(path, default=None):
         return default
     if path.is_symlink() or path.stat().st_size > 4000000:
         raise Refused('配置路径或大小不支持')
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding='utf-8'))
 
 
 def private_key():
@@ -69,7 +69,7 @@ def private_key():
 
 def environment():
     result = {}
-    for line in ENV.read_text().splitlines():
+    for line in ENV.read_text(encoding='utf-8').splitlines():
         line = line.strip()
         if not line or line.startswith('#'):
             continue

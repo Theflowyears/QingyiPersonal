@@ -17,11 +17,28 @@
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `ONEBOT_WS` | `ws://127.0.0.1:3001` | OneBot WebSocket |
-| `ONEBOT_ACCESS_TOKEN` | 空 | OneBot 鉴权 |
-| `OPENCLAW_URL` | 本机兼容接口 | OpenClaw Chat Completions 地址 |
-| `OPENCLAW_GATEWAY_TOKEN` | 无 | Gateway token；也可从配置读取 |
-| `CEYLAN_OPENCLAW_CONFIG` | OpenClaw 常见路径 | OpenClaw 配置路径 |
+| `ONEBOT_ACCESS_TOKEN` | 空 | OneBot 鉴权；留空时必须保证该端口不可从公网抵达 |
 | `CEYLAN_ONEBOT_CONFIG` | 自动发现 | NapCat OneBot 配置路径 |
+
+### 模型通道（实际主链路）
+
+文本、视觉、摘要、长文、备胎各自是一组 `<PREFIX>_BASE_URL / _API_KEY / _MODEL / _MAX_TOKENS / _TIMEOUT / _REASONING_EFFORT / _NAME`：
+
+| 前缀 | 角色 | 读取时机 |
+|---|---|---|
+| `LLM_TEXT_` | 日常水群主链路 | 进程启动时 |
+| `LLM_VISION_` | 带图请求 | 进程启动时 |
+| `LLM_SUMMARY_` | 记忆压缩（建议与主链路不同供应商，避免抢配额） | 进程启动时 |
+| `LLM_DEEP_` | 长文/认真答 | 每次调用重读 |
+| `LLM_SOL_` | 长文备胎（`temperature` 不发送） | 每次调用重读 |
+| `LLM_FB1_` / `LLM_FB2_` | 故障转移链，由 `LLM_FALLBACK_PREFIXES` 逗号列举 | 进程启动时 |
+| `LLM_TEXT_FALLBACK_` | 延迟劣化时的自动降档目标 | 每次调用重读 |
+
+调参：`ADAPT_SLOW_SECONDS`（判定慢的阈值，默认 2.0）、`ADAPT_SLOW_STREAK`（连续次数，默认 4）、`ADAPT_COOLDOWN_SECONDS`（降档冷却，默认 600）、`LLM_RETRY_TIMES`（默认 3）。`reasoning_effort` 取值 `low/medium/high/none/minimal`，留空表示完全不发送思考开关。
+
+### OpenClaw 兼容路径（已非必需）
+
+`OPENCLAW_URL`、`OPENCLAW_GATEWAY_TOKEN`、`CEYLAN_OPENCLAW_CONFIG` 只用于向后兼容：`OPENCLAW_URL` 与 token 同时存在时 `call_openclaw` 才走旧网关，否则一律走上面的 `LLM_*` 通道。缺 token 也不再报错，直连模型即可正常工作。
 
 ## 隐私与权限
 
@@ -37,10 +54,16 @@
 
 URL 必须是普通 URL，例如 `https://example.com/api/bot/status`，不能写成 Markdown 链接 `[https://...](https://...)`。
 
-## 上下文和资源
+机器人与网站同机部署时，这组地址一个都不需要填：状态走 `data/bot_status.json`，命令走 `data/control-v4/inbox/` 文件桥，只有心跳与详细遥测仍按各自定时器 POST。
 
-常用变量包括 `MAX_HISTORY`、`ACTIVE_GROUP_CONTEXT_LIMIT`、`PERIODIC_REVIEW_INTERVAL_SECONDS`、`GROUP_MEMORY_COMPACT_INTERVAL_SECONDS`、`GROUP_MEMORY_MIN_NEW_MESSAGES`、`CEYLAN_MODEL_CONCURRENCY` 和 `CEYLAN_MAX_PENDING`。数值越大不一定越好；先使用示例默认值并观察模型延迟与 Token 用量。
+## 参数优先级
+
+`data/control-v4/settings.json`（面板热改，最高）> `config.env` > 代码默认值。面板能改的键由 `ceylan_control_core` 的 `RANGES`/`FLOATS`/`BOOLS` 限定；`settings.json` 在机器人进程启动时载入，因此手工编辑该文件后需要 `systemctl restart` 才生效。
 
 ## 视觉
 
-`USE_DIRECT_MIMO_VISION=1` 时使用 `MIMO_VISION_BASE_URL`、`MIMO_VISION_API_KEY` 和 `MIMO_VISION_MODEL`。不开启时，图片可交由 OpenClaw 统一处理。任何 Key 都只能放在机器人主机的受保护环境文件中。
+`USE_DIRECT_MIMO_VISION=1` 且 `MIMO_VISION_BASE_URL`、`MIMO_VISION_API_KEY` 均已配置时，带图请求直连 MiMo；否则视觉请求走 `LLM_VISION_*` 通道。`VISION_ENABLE_THINKING` 留空表示由模型自身默认决定，`0`/`1` 才强制开关。任何 Key 都只能放在机器人主机的受保护环境文件中。
+
+## 上下文和资源
+
+常用变量包括 `MAX_HISTORY`、`ACTIVE_GROUP_CONTEXT_LIMIT`、`PERIODIC_REVIEW_INTERVAL_SECONDS`、`GROUP_MEMORY_COMPACT_INTERVAL_SECONDS`、`GROUP_MEMORY_MIN_NEW_MESSAGES`、`CEYLAN_MODEL_CONCURRENCY` 和 `CEYLAN_MAX_PENDING`。数值越大不一定越好；先使用示例默认值并观察模型延迟与 Token 用量。

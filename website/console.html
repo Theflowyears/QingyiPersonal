@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CEYLAN // 作战控制台</title>
+<link rel="stylesheet" href="/admin/assets/console.css?v={{ASSET_VER}}">
+<!-- 弱网优化：提前建好连接，CSS/JS 并行抓取，不串行等 -->
+<link rel="preconnect" href="/" crossorigin>
+<link rel="dns-prefetch" href="/">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 2.4 20.4 7v10L12 21.6 3.6 17V7z"/><path d="M8.2 13.4v-3M11.6 15.4V9.2M15 13.4v-3" stroke-linecap="round"/></svg></div>
+    <div><b>CEYLAN</b><em>OPERATOR CONSOLE · V3</em></div>
+  </div>
+  <div class="top-spacer"></div>
+  <div class="pill"><span class="dot" id="dot-bot"></span>BOT <b id="top-bot">--</b></div>
+  <div class="pill">NODE <b>127.0.0.1:3001</b></div>
+  <div class="pill">MEM <b id="top-mem">--</b></div>
+  <div class="pill mono" id="top-clock">--:--:--</div>
+  <button class="btn" id="btn-refresh">刷新</button>
+  <button class="btn btn-qr" id="btn-qr">
+    <span class="qr-dot" id="qr-dot"></span><span id="qr-label">QQ</span>
+  </button>
+  <a class="btn" href="/admin/logout">登出</a>
+</header>
+
+<div id="observer-banner" hidden>观察员模式 · 只读 —— 可以查看全部设置与状态，任何修改都已被禁用。</div>
+
+<!-- 扫码弹层 -->
+<div class="qr-mask" id="qr-mask">
+  <div class="qr-box">
+    <div class="qr-head">
+      <b id="qr-title">扫码登录 QQ</b>
+      <button class="qr-x" id="qr-close">×</button>
+    </div>
+    <div class="qr-body">
+      <div class="qr-img-wrap">
+        <img id="qr-img" alt="登录二维码" width="220" height="220">
+        <div class="qr-ph" id="qr-ph">正在获取…</div>
+      </div>
+      <div class="qr-side">
+        <div class="qr-state" id="qr-state">检查中…</div>
+        <p class="qr-tip">手机 QQ → 扫一扫。<br>二维码约 2 分钟过期，过期会自动刷新。</p>
+        <div class="qr-actions">
+          <button class="btn" id="qr-refresh">换一张</button>
+          <a class="btn" id="qr-webui" target="_blank" rel="noopener">打开 NapCat WebUI</a>
+        </div>
+        <div class="qr-hint" id="qr-hint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="side">
+    <button class="nav-item on" data-view="overview">总览<i>OVERVIEW</i></button>
+    <button class="nav-item" data-view="qingyi">清漪<i>CONTINUUM</i></button>
+    <button class="nav-item" data-view="persona">人格<i>PERSONA</i></button>
+    <button class="nav-item" data-view="memory">记忆<i>MEMORY</i></button>
+    <button class="nav-item" data-view="models">模型<i>MODELS</i></button>
+    <button class="nav-item" data-view="style">文风<i>STYLE</i></button>
+    <button class="nav-item" data-view="advanced">高级<i>ADVANCED</i></button>
+    <button class="nav-item" data-view="monitor">监控<i>MONITOR</i></button>
+    <button class="nav-item" data-view="emojis">表情<i>EMOTES</i></button>
+    <button class="nav-item" data-view="visits">访客<i>AUDIENCE</i></button>
+    <div class="side-foot">
+      <b>NODE</b> ONLINE<br>
+      <b>BUILD</b> 3.0.0<br>
+      <b>LINK</b> WS://3001
+    </div>
+  </nav>
+
+  <main>
+    <!-- ============ OVERVIEW ============ -->
+    <section class="view on" id="view-overview">
+      <div class="eyebrow">SYSTEM OVERVIEW</div>
+      <h1>控制台<span>总览</span></h1>
+      <p class="sub">机器人节点、群组记忆、模型与服务器状态一览。</p>
+
+      <div class="grid g4" style="margin-bottom:16px">
+        <div class="stat gr"><div class="k">BOT STATUS</div><div class="v" id="ov-bot">--</div><div class="f" id="ov-bot-f">等待上报</div></div>
+        <div class="stat cy"><div class="k">GROUPS</div><div class="v" id="ov-groups">--</div><div class="f">已接入群组</div></div>
+        <div class="stat am"><div class="k">TODAY MSG</div><div class="v" id="ov-msgs">--</div><div class="f" id="ov-msgs-f">今日消息</div></div>
+        <div class="stat"><div class="k">UPTIME</div><div class="v" id="ov-uptime">--</div><div class="f">服务运行时长</div></div>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <h2>服务健康 <small>HEALTH · 每分钟检查</small></h2>
+          <p class="sub">三项检查：qqbot 服务、NapCat 端口、bot↔NapCat 连接。
+            掉线自动尝试恢复；NapCat 需扫码的情况只报警不重启。</p>
+          <div id="hd-list" class="pm-list"><div class="empty">加载中…</div></div>
+          <div class="inline" style="margin-top:10px">
+            <button class="btn" id="hd-recheck">立即检查</button>
+            <span class="hint" id="hd-msg"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>节点状态 <small>NODE</small></h2>
+          <div id="ov-node"></div>
+        </div>
+
+        <!-- 资源与操作并排：两张卡等高，表格在框里滚，不会把页面拉长 -->
+        <div class="card">
+          <h2>服务器资源 <small>RESOURCE</small></h2>
+          <div id="ov-res"></div>
+        </div>
+
+        <div class="card">
+          <h2>最近操作 <small>OPERATIONS</small></h2>
+          <div class="tbl-wrap ov-scroll"><table class="t" id="ov-ops"></table></div>
+        </div>
+      </div>
+
+      <!-- 用量与账单并排，放在资源/操作下面 -->
+      <div class="grid g2">
+        <div class="card">
+          <h2>今日用量 <small>TOKENS · 按模型汇总</small></h2>
+          <p class="sub">当天所有模型调用的 token 汇总。缓存命中的部分单价低得多，命中率越高越省。</p>
+          <div id="tk-total" class="hint" style="margin-bottom:10px">加载中…</div>
+          <div id="tk-models"></div>
+          <div id="bl-prices"></div>
+        </div>
+
+        <div class="card">
+          <h2>账单对账 <small>BILL · 控制台 vs 本地</small></h2>
+          <p class="sub">点「从云端拉取」直接取阿里云账单（需要 AK/SK）；也可以把控制台账单整段粘贴进来解析。</p>
+          <textarea id="bl-raw" class="bl-input" placeholder="2026-11-06
+大模型推理
+qwen3.8-flash
+大模型文本消耗量
+输入（未命中缓存）
+191.267
+千tokens
+¥
+0.1530136
+…（直接 Ctrl+A 粘贴即可）"></textarea>
+          <div class="inline" style="margin:10px 0">
+            <button class="btn primary" id="bl-pull">从云端拉取</button>
+            <button class="btn" id="bl-parse">解析粘贴</button>
+            <button class="btn" id="bl-clear">清空</button>
+            <span class="hint" id="bl-msg"></span>
+          </div>
+          <div id="bl-result"><div class="empty">还没导入账单</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ QINGYI CONTINUUM ============ -->
+    <section class="view" id="view-qingyi">
+      <div class="eyebrow">EVIDENCE-GROWTH CONSOLE</div>
+      <h1>清漪<span>推进</span></h1>
+      <p class="sub">经历、记忆、情感与持续自我按证据分段推进。检测和页面只读展示；通过也不自动实现、部署或接管表达。</p>
+
+      <div class="qy-top">
+        <div class="card qy-metric"><span>当前推进</span><b id="qingyi-stage-summary">未读取</b><small id="qingyi-stage-note">打开本页读取目录和最近报告</small></div>
+        <div class="card qy-metric"><span>最近检测</span><b id="qingyi-report-summary">尚无报告</b><small id="qingyi-report-time">—</small></div>
+        <div class="card qy-metric"><span>当前可推进</span><b id="qingyi-next-summary">未计算</b><small id="qingyi-next-list">—</small></div>
+        <div class="card qy-metric"><span>控制权</span><b id="qingyi-control-summary">未接管</b><small>阶段3与表达控制均需人工授权</small></div>
+        <div class="qy-actions">
+          <button class="btn primary" id="qingyi-run" type="button">运行前置检测</button>
+          <button class="btn" id="qingyi-refresh" type="button">刷新状态</button>
+          <button class="btn" id="qingyi-download" type="button" disabled>下载脱敏报告</button>
+          <span class="hint" id="qingyi-message" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <p class="hint qy-boundary">默认“运行前置检测”只读取现有证据，不启动影子tick、候选标注、模型、消息发送或自动推进。</p>
+
+      <nav class="qy-tabs" aria-label="清漪子板块">
+        <button class="qy-tab on" type="button" data-qingyi-tab="overview">推进总览</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="checks">前置检测</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="memory">记忆与关联</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="shadow">情感与影子</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="evidence">证据与管理</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="roadmap">任务与算法</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="annotate">人工标注</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="organic">自然样本</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="review">人工评审</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="takeover">接管进度</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="intervene">证据介入</button>
+        <button class="qy-tab" type="button" data-qingyi-tab="capabilities">真实能力</button>
+      </nav>
+
+      <div class="qy-panel on" id="qingyi-panel-overview">
+        <div class="qy-filter">
+          <button class="btn mini on" type="button" data-qingyi-filter="all">全部</button>
+          <button class="btn mini" type="button" data-qingyi-filter="tonight">当前可做</button>
+          <button class="btn mini" type="button" data-qingyi-filter="done">已完成</button>
+          <button class="btn mini" type="button" data-qingyi-filter="blocked">阻塞</button>
+          <button class="btn mini" type="button" data-qingyi-filter="organic">待自然样本</button>
+          <button class="btn mini" type="button" data-qingyi-filter="manual">待批准</button>
+        </div>
+        <div id="qingyi-stages" class="qy-stages"><div class="empty">目录加载中…</div></div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-checks">
+        <div class="qy-check-summary"><b id="qingyi-check-status">未检测</b><span id="qingyi-check-meta">最近一次证据检测会显示在此处</span></div>
+        <div id="qingyi-checks" class="rd-list"><div class="empty">尚无检测报告</div></div>
+        <div class="card" style="margin-top:10px">
+          <h2>工程验证 · 怎么验 / 验到哪 / 要多久</h2>
+          <p class="sub">每项工程门 = 一组隔离契约测试，绑定当前代码与解释器跑，静态 grep 不算。点下面按钮立即重跑，进度实时刷新。</p>
+          <div class="qy-anno-actions">
+            <button class="btn mini" type="button" id="eng-run">立即隔离验证</button>
+            <span id="eng-msg" class="hint"></span>
+          </div>
+          <div id="eng-list" class="rd-list"><div class="empty">尚无工程验证读数</div></div>
+        </div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-memory">
+        <div class="qy-check-summary"><b id="qingyi-memory-status">未计算</b><span id="qingyi-memory-meta">记忆N1—N3与Ripple任务分列，未来门不阻塞当前开发</span></div>
+        <div id="qingyi-memory-tasks" class="qy-task-columns"><div class="empty">加载中…</div></div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-shadow">
+        <p class="hint">以下卡片在用户打开“情感与影子”时才读取实时影子；候选全历史反事实只在展开详情后加载。</p>
+        <div class="card shadow-card" aria-labelledby="emotion-shadow-title">
+          <div class="shadow-header">
+            <h2 id="emotion-shadow-title">影子观测检查 未提供</h2>
+            <span class="tag cy">shadow</span>
+            <button class="btn" id="emotion-shadow-refresh" type="button">刷新</button>
+          </div>
+          <p class="hint shadow-summary" id="emotion-shadow-summary" role="status" aria-live="polite">等待读取</p>
+          <p class="hint shadow-boundary">仅计算状态，不证明主观体验；未校准，不接管表达。可评审≠已校准，阶段3开不开由人定。</p>
+          <h3 class="shadow-h">① 四维状态 <small>效价 / 唤醒 / 掌控 / 注意 · 只观测</small></h3>
+          <div id="emotion-shadow-values" class="shadow-values"></div>
+          <button class="btn persona-disclosure shadow-toggle" id="emotion-shadow-toggle" type="button" aria-expanded="false" aria-controls="emotion-shadow-details">展开：检查项 / 记账 / 效价样本 / 回放 / 时间线</button>
+          <div id="emotion-shadow-details" class="shadow-details" role="region" aria-label="影子观测详情" tabindex="0" hidden>
+            <h3 class="shadow-h">② 校准（10 项全过才可评审）</h3>
+            <div id="emotion-shadow-calib"></div>
+            <h3 class="shadow-h">③ 记账概览 <small>收到/有效/忽略/隔离 · 种类 · 工具 · 新鲜度 · 积压</small></h3>
+            <div id="emotion-shadow-diagnostics" class="shadow-diagnostics"></div>
+            <p class="hint">不接管回复、目标、签名或收件人。观测检查不是校准百分比，可评审也不等于已校准。</p>
+            <section id="valence-samples" class="shadow-section" aria-label="效价样本账本">
+              <h3 class="shadow-h">④ 效价样本 <small>仅「对她说」的消息 · 影子评测 · 不接管表达</small></h3>
+              <p class="hint" id="valence-samples-brief">效价样本：等待展开</p>
+              <div class="hint" id="valence-cand-stats"></div>
+              <p class="hint" id="valence-samples-sum">等待展开</p>
+              <div class="pm-list sm valence-samples-list" id="valence-samples-list"></div>
+            </section>
+            <h3 class="shadow-h">⑤ 回放与四维证据 <small>回放误差应为 0</small></h3>
+            <section id="emotion-shadow-retrospective" class="shadow-section"></section>
+            <section id="emotion-shadow-dimension-evidence" class="shadow-section" aria-label="四维驱动证据"></section>
+            <div class="hint" id="emotion-shadow-observation"></div>
+            <h3 class="shadow-h shadow-timeline-title">⑥ 最近事件时间线</h3>
+            <div class="pm-list" id="emotion-shadow-timeline"></div>
+          </div>
+        </div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-evidence">
+        <div class="card" aria-labelledby="readiness-title">
+          <div class="shadow-header">
+            <h2 id="readiness-title">阶段2.5 准入判定 未提供</h2>
+            <span class="tag cy">只读账本</span>
+            <button class="btn" id="readiness-refresh" type="button">刷新</button>
+          </div>
+          <p class="hint" id="readiness-summary" role="status" aria-live="polite">等待读取</p>
+          <p class="hint" id="readiness-clock"></p>
+          <p class="hint" id="readiness-window"></p>
+          <p class="hint" id="readiness-observation"></p>
+          <div class="rd-scope-summary">
+            <p class="hint" id="readiness-engineering"></p>
+            <p class="hint" id="readiness-coverage"></p>
+          </div>
+          <h3 class="rd-section-title" id="readiness-current-label">当前检查</h3>
+          <div class="rd-list" id="readiness-checks" aria-labelledby="readiness-current-label"><div class="empty">等待读取</div></div>
+          <details class="rd-history" id="readiness-history" hidden>
+            <summary id="readiness-history-summary">历史覆盖（独立保留）</summary>
+            <p class="hint" id="readiness-history-boundary"></p>
+            <div class="rd-list" id="readiness-history-checks" aria-labelledby="readiness-history-summary"></div>
+          </details>
+          <p class="hint" id="readiness-stage"></p>
+          <p class="hint">这里的每一项都来自账本本身，不是校准通过率。「暂无样本」和「不合格」不一样；工程契约不能冒充自然经历。</p>
+        </div>
+        <div class="card" aria-labelledby="cognition-control-title">
+          <h2 id="cognition-control-title">认知管理 <small>独立危险操作</small></h2>
+          <p class="hint">这里只提交管理员明确指令；它与“运行前置检测”不共用事件，不会自动改变授权范围。</p>
+          <form id="cognition-control-form">
+            <label>认知控制操作 <select id="cognition-operation"><option value="consent">明确同意/拒绝</option><option value="revoke_consent">撤销同意记录</option><option value="retract_evidence">撤回证据</option></select></label>
+            <label>收件人 QQ <input type="text" id="cognition-recipient" inputmode="numeric"></label>
+            <label>范围 <select id="cognition-action"><option value="dm">私聊</option><option value="group">群聊</option><option value="send">发送</option></select></label>
+            <label>决定 <select id="cognition-decision"><option value="deny">拒绝</option><option value="allow">允许</option></select></label>
+            <label>待撤销记录/证据 ID <input type="text" id="cognition-id"></label>
+            <label>明确原因 <input type="text" id="cognition-reason" required maxlength="2000"></label>
+            <button class="btn" type="submit">提交明确指令</button>
+            <output id="cognition-result" aria-live="polite"></output>
+            <p>仅修改指定范围的记录；不授权阶段3，也不代表对方已收到消息。</p>
+          </form>
+        </div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-roadmap">
+        <div class="grid g2">
+          <div class="card"><h2>阶段目录</h2><p class="sub">原阶段0—5、Ripple并行分支、本次检测/UI建设共用同一机器目录。</p><div id="qingyi-catalog" class="qy-catalog"><div class="empty">加载中…</div></div></div>
+          <div class="card"><h2>如何读这些状态</h2><ul class="qy-key">
+            <li><b>开发前置</b>决定现在能否写代码；不代表功能完成。</li>
+            <li><b>工程验证</b>必须绑定当前代码、解释器和测试产物；静态grep不算。</li>
+            <li><b>自然证据</b>来自真实经历；测试、候选回放不能补数。</li>
+            <li><b>人工授权</b>独立于前三项；检测全过也不会自动开启阶段3。</li>
+          </ul></div>
+        </div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-annotate">
+        <div class="card">
+          <h2>记忆来源标注</h2>
+          <p class="sub">把「这条记忆从哪来」交还给你。标完立刻写进真实账本并重跑门判定；来源必须是真实事件，绝不补造。</p>
+          <div class="qy-anno-progress">
+            <div class="qy-anno-bar"><i id="anno-bar-fill"></i></div>
+            <div class="qy-anno-meta"><b id="anno-count">—</b><span id="anno-gate" class="tag">—</span><span id="anno-annotated" class="hint"></span></div>
+          </div>
+          <div class="qy-anno-actions">
+            <button class="btn mini" type="button" id="anno-refresh">刷新样本</button>
+            <button class="btn mini" type="button" id="anno-autolink">自动绑定可定位来源</button>
+            <span id="anno-msg" class="hint"></span>
+          </div>
+          <div id="anno-list" class="qy-anno-list"><div class="empty">加载中…</div></div>
+        </div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-organic">
+        <div class="card">
+          <h2>自然样本累积</h2>
+          <p class="sub">每个有机门的真实读数随时间的变化。在涨=在累积；一直平=没新样本，不是故障。只读真实账本，不补数。</p>
+          <div class="qy-anno-actions"><button class="btn mini" type="button" id="organic-refresh">刷新</button><span id="organic-msg" class="hint"></span></div>
+          <div id="organic-list" class="rd-list"><div class="empty">加载中…</div></div>
+        </div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-review">
+        <div class="card">
+          <h2>人工评审</h2>
+          <p class="sub">需要你点头的任务。批准/否决与 QQ /ops approve 同一账本；工程验证由隔离契约自动跑，这里只审人工授权。注意：批准任务≠开启灰度，灰度开关在「接管进度」。</p>
+          <div class="qy-anno-actions"><span id="review-msg" class="hint"></span></div>
+          <div id="review-list" class="qy-anno-list"><div class="empty">加载中…</div></div>
+        </div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-takeover">
+        <div class="card">
+          <h2>情感接管行为 · 门前进度与授权</h2>
+          <p class="sub">接管=阶段3。工程+自然全过只是"可评审"，真正开启必须你本人签字翻开关；AI 永不代翻。下面摊开每道门与授权状态。</p>
+          <div class="qy-anno-actions"><button class="btn mini" type="button" id="takeover-refresh">刷新</button><span id="takeover-msg" class="hint"></span></div>
+          <div id="takeover-summary" class="qy-check-summary"></div>
+          <div id="takeover-auth" class="qy-anno-card"></div>
+          <div id="takeover-list" class="rd-list"><div class="empty">加载中…</div></div>
+        </div>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-capabilities">
+        <section class="card">
+          <h2>真实能力与证据</h2><p class="sub">代码存在、真实接线、请求使用、独立评测、发布绑定分别判定，不再用任务数代替实际能力。</p>
+          <div class="qy-anno-actions"><button class="btn mini" id="capabilities-refresh" type="button">刷新</button><button class="btn mini primary" id="capabilities-evaluate" type="button">运行确定性回放</button><span id="capabilities-msg" class="hint"></span></div>
+          <div id="capabilities-list" class="rd-list"><div class="empty">加载中…</div></div>
+          <div id="capabilities-cases" class="qy-anno-list"></div>
+        </section>
+      </div>
+      <div class="qy-panel" id="qingyi-panel-intervene">
+        <div class="card">
+          <h2>证据介入</h2>
+          <p class="sub">缺证据的动作补挂真实来源；自我修订靠真实整理累积。只认真实事件，找不到就留给人工，不补造。</p>
+          <div class="qy-anno-actions"><button class="btn mini" type="button" id="intervene-refresh">刷新</button><span id="intervene-msg" class="hint"></span></div>
+          <div id="intervene-selfview" class="qy-anno-card"></div>
+          <div id="intervene-list" class="qy-anno-list"><div class="empty">加载中…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PERSONA ============ -->
+    <section class="view" id="view-persona">
+      <div class="eyebrow">PERSONA CONTROL</div>
+      <h1>人格<span>设定</span></h1>
+      <p class="sub">先看她的自我与互动，再查影子证据和生活记忆。设定按需展开，观测不接管表达。</p>
+
+      <section class="persona-section" aria-labelledby="persona-self-title">
+        <h2 class="grp" id="persona-self-title">自我 · SELF</h2>
+        <div class="card persona-self">
+          <label class="f" for="pm-selfview"><span>自我认知 SELF VIEW</span>
+            <textarea id="pm-selfview" rows="2" placeholder="她如何认识自己……"></textarea>
+          </label>
+          <div class="inline">
+            <button class="btn" id="pm-save-sv">保存自我认知</button>
+            <button class="btn persona-disclosure" id="persona-settings-toggle" type="button" aria-expanded="false" aria-controls="persona-settings">展开人设与回复设置</button>
+          </div>
+        </div>
+        <div id="persona-settings" hidden>
+      <div class="grid g2">
+        <div class="card">
+          <h2>人设模式 <small>MODE</small></h2>
+          <label class="chk"><input type="radio" name="pmode" value="whale" id="pm-whale"> 🐋 示例人格（出厂内置）</label>
+          <label class="chk"><input type="radio" name="pmode" value="generic" id="pm-generic"> 🤖 通用助手（可自定义）</label>
+          <div class="sec-line"></div>
+          <label class="f"><span>显示名称 DISPLAY NAME</span><input type="text" id="pf-name" placeholder="清漪"></label>
+          <label class="f"><span>触发词 TRIGGERS（逗号分隔）</span><input type="text" id="pf-triggers" placeholder="我,清漪"></label>
+          <button class="btn primary" id="pf-save-mode">保存人设</button>
+        </div>
+
+        <div class="card">
+          <h2>自定义设定 <small>CUSTOM</small></h2>
+          <div class="bar-lab" style="margin-bottom:7px"><span>快速预设</span><b></b></div>
+          <div class="chips" id="pf-presets" style="margin-bottom:14px"></div>
+          <label class="f"><span>仅在「通用助手」模式下生效</span>
+            <textarea id="pf-custom" rows="7" placeholder="描述你想让她成为什么样子……"></textarea>
+          </label>
+        </div>
+      </div>
+
+        <div class="card">
+          <h2>回复参数 <small>REPLY PARAM</small></h2>
+          <p class="sub">改完点「应用参数」才生效；这一组和「高级设置」里的是同一份数据，改哪边都一样。</p>
+          <div class="grid g2">
+            <div class="rp-row"><div class="bar-lab"><span>单条字数上限</span><b id="rp-chars-v">--</b></div>
+              <input type="range" id="rp-chars" min="15" max="600" step="5"></div>
+            <div class="rp-row"><div class="bar-lab"><span>生成 token 上限</span><b id="rp-tokens-v">--</b></div>
+              <input type="range" id="rp-tokens" min="30" max="800" step="10"></div>
+            <div class="rp-row"><div class="bar-lab"><span>气泡条数</span><b id="rp-bubbles-v">--</b></div>
+              <input type="range" id="rp-bubbles" min="1" max="3" step="1"></div>
+            <div class="rp-row"><div class="bar-lab"><span>条间延迟 (ms)</span><b id="rp-delay-v">--</b></div>
+              <input type="range" id="rp-delay" min="200" max="10000" step="100"></div>
+          </div>
+          <label class="chk"><input type="checkbox" id="rp-patrol"> 开启定时巡群</label>
+          <label class="chk"><input type="checkbox" id="rp-memory"> 开启记忆系统</label>
+          <button class="btn primary" id="rp-save">应用参数</button>
+        </div>
+        </div>
+      </section>
+
+      <section class="persona-section" aria-labelledby="persona-relations-title">
+        <h2 class="grp" id="persona-relations-title">互动关系 · RELATIONS</h2>
+        <div class="card">
+          <h2>好感度 <small>AFFECTION · 只影响语气</small></h2>
+          <div class="inline" style="margin:-6px 0 10px">
+            <button class="btn" id="af-refresh">刷新好感度</button>
+            <span class="hint" id="af-updated"></span>
+          </div>
+          <p class="sub">她对这些人的态度。<b>-50 到 +100</b>：高了好感说话更软、更顺着，低了更容易不耐烦——具体语气表现由角色卡决定。
+            单次最多 ±5，每天涨跌各封顶 ±20，几天不聊会慢慢往 0 回。</p>
+          <div class="pm-list" id="af-list"><div class="empty">加载中…</div></div>
+          <div class="inline" style="margin-top:12px">
+            <input type="text" id="af-uid" placeholder="QQ号" style="width:150px">
+            <input type="number" id="af-delta" placeholder="±分" style="width:80px">
+            <button class="btn" id="af-bump">调整</button>
+            <button class="btn" id="af-reset" aria-expanded="false" aria-controls="af-reset-confirm">全部归零</button>
+            <span class="hint" id="af-msg" role="status"></span>
+          </div>
+          <div id="af-reset-confirm" class="persona-confirm" role="group" aria-label="确认好感度清零" hidden>
+            <p class="hint">将所有好感度归零？这会修改现有关系分数。</p>
+            <button class="btn" id="af-reset-no" type="button">取消</button>
+            <button class="btn" id="af-reset-yes" type="button">确认归零</button>
+          </div>
+        </div>
+
+      <div class="card">
+        <h2>愿望墙 <small>WISH WALL · 只在控制台</small></h2>
+        <p class="sub">这里的话不进 QQ，群友看不见，但会写进她的记忆。她想要的、想知道的都在这儿；你回她，她会用完整的自己答你。</p>
+        <div class="grid g2">
+          <div>
+            <div class="bar-lab"><span>她的愿望</span><b></b></div>
+            <div class="wish-list" id="wish-list"><div class="empty">还没有愿望，等她自己写</div></div>
+            <div id="wish-archived"></div>
+            <div class="inline" style="margin-top:10px">
+              <input type="text" id="wish-new" placeholder="替她写一条？" style="flex:1">
+              <button class="btn" id="wish-add">添加</button>
+            </div>
+            <div class="attach">
+              <label class="attach-pick" for="wish-file">贴一张图</label>
+              <input type="file" id="wish-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+              <button class="attach-x" id="wish-clear" title="去掉这张图" hidden>×</button>
+              <span class="attach-tip" id="wish-attach-tip">也可以直接在输入框里 Ctrl+V 粘贴</span>
+              <img class="attach-thumb" id="wish-thumb" alt="" hidden>
+            </div>
+          </div>
+          <div>
+            <div class="bar-lab"><span>悄悄话</span><b></b></div>
+            <div class="chat-log" id="whisper-log"><div class="empty">还没说过话</div></div>
+            <div class="inline" style="margin-top:10px">
+              <input type="text" id="whisper-in" placeholder="跟她说点悄悄话…" style="flex:1">
+              <button class="btn primary" id="whisper-send">说</button>
+            </div>
+            <div class="attach">
+              <label class="attach-pick" for="photo-in">选一张图</label>
+              <input type="file" id="photo-in" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+              <button class="attach-x" id="photo-clear" title="去掉这张图" hidden>×</button>
+              <span class="attach-tip" id="photo-attach-tip">粘贴进输入框也算</span>
+              <img class="attach-thumb" id="photo-thumb" alt="" hidden>
+              <button class="btn" id="photo-send">发图</button>
+            </div>
+            <div class="hint" id="whisper-hint" style="margin-top:6px"></div>
+            <div class="hint" id="photo-hint" style="margin-top:6px"></div>
+            <div id="photo-notes" style="margin-top:6px"></div>
+          </div>
+        </div>
+      </div>
+
+      </section>
+
+      <section class="persona-section" aria-labelledby="persona-continuity-title">
+        <h2 class="grp" id="persona-continuity-title">持续自我 · CONTINUUM</h2>
+        <div class="card">
+          <h2>影子与准入已移至清漪</h2>
+          <p class="sub">人格页继续负责自我设定、关系和生活记忆；机制进度、证据和管理动作统一放在侧栏“清漪”。</p>
+          <button class="btn" id="persona-open-qingyi" type="button">打开清漪推进页</button>
+        </div>
+      </section>
+
+      <section class="persona-section" aria-labelledby="persona-memory-title">
+        <h2 class="grp" id="persona-memory-title">生活记忆 · LIFE & MEMORY</h2>
+        <div class="grid g2">
+          <div class="card">
+            <h2>人格记忆 <small>SOUL EDITOR</small></h2>
+            <p class="sub">她记住的事、经历、喜恶和在意的话题。点文字编辑，点空白处保存。</p>
+            <div class="inline" id="pm-tabs" style="margin-bottom:12px"></div>
+            <div class="pm-list" id="pm-list"><div class="empty">加载中…</div></div>
+            <div class="inline" style="margin-top:12px">
+              <input type="text" id="pm-new" placeholder="写一条新的……" style="flex:1">
+              <button class="btn primary" id="pm-add">添加</button>
+              <span class="hint" id="pm-msg"></span>
+            </div>
+          </div>
+          <div class="card">
+            <h2>成长档案 <small>GROWTH</small></h2>
+            <p class="sub">目标、承诺、自我认知的每一次修订。</p>
+            <div id="pg-block"><div class="empty">加载中…</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>她自己看过什么 <small>EXPLORING</small></h2>
+          <p class="sub">她自己查的、刷的视频与在意的话题。来自后台流水，只读，不把计划当作经历。</p>
+          <div class="inline" style="margin-bottom:10px">
+            <button class="btn" id="ex-refresh">刷新</button>
+            <span class="hint" id="ex-sum">加载中…</span>
+          </div>
+          <div class="grid g3 ex-grid">
+            <div class="ex-col"><div class="bar-lab"><span>她查过的</span><b id="ex-search-n"></b></div>
+              <div class="pm-list sm" id="ex-search"><div class="empty">还没查过</div></div></div>
+            <div class="ex-col"><div class="bar-lab"><span>她刷到的视频</span><b id="ex-watch-n"></b></div>
+              <div class="pm-list sm" id="ex-watch"><div class="empty">还没刷过</div></div></div>
+            <div class="ex-col"><div class="bar-lab"><span>她在意的话题（好奇度）</span><b id="ex-topics-n"></b></div>
+              <div class="pm-list sm" id="ex-topics"><div class="empty">账上还没有话题</div></div></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ============ MEMORY ============ -->
+    <section class="view" id="view-memory">
+      <div class="eyebrow">MEMORY ARCHIVE</div>
+      <h1>记忆<span>管理</span></h1>
+      <p class="sub">每个私聊与群组的对话记忆，以及群长期记忆摘要。</p>
+
+      <div class="grid g2">
+        <div class="card">
+          <h2>会话列表 <small>SESSIONS</small></h2>
+          <div class="list-sel" id="mem-list"><div class="empty">加载中…</div></div>
+        </div>
+        <div class="card">
+          <h2>对话内容 <small>TRANSCRIPT</small></h2>
+          <div class="scroll-y" id="mem-detail"><div class="empty">← 选择左侧会话</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>自定义记忆 <small>PINNED MEMORY</small></h2>
+        <p class="hint" style="margin-bottom:12px">你亲手写的记忆优先级最高，原样注入给她，不会被人格整理覆盖。</p>
+        <div class="inline" style="margin-bottom:12px;align-items:flex-start">
+          <textarea id="cm-input" rows="3" placeholder="例如：主人讨厌被叫「宝宝」，只准叫「主人」或「主人」" style="flex:1;min-height:70px"></textarea>
+          <button class="btn primary sm" id="cm-add" style="margin-top:2px">写入记忆</button>
+        </div>
+        <div id="cm-list"><div class="empty">加载中…</div></div>
+      </div>
+
+      <div class="card">
+        <h2>群长期记忆 <small>GROUP MEMORY</small></h2>
+        <div class="inline" style="margin-bottom:14px">
+          <select id="gm-select" style="max-width:320px"><option value="">选择群组…</option></select>
+          <button class="btn primary sm" id="gm-rebuild">强制重建</button>
+          <span class="hint" id="gm-status"></span>
+        </div>
+        <div class="grid g2">
+          <div>
+            <div class="bar-lab"><span>记忆摘要</span><b id="gm-len">--</b></div>
+            <div class="scroll-y" id="gm-body" style="margin-top:8px"><div class="empty">未选择</div></div>
+          </div>
+          <div>
+            <div class="bar-lab"><span>统计</span><b></b></div>
+            <div id="gm-stats" style="margin-top:8px"></div>
+            <div class="bar-lab" style="margin-top:16px"><span>最近缓存消息</span><b id="gm-cache-n">--</b></div>
+            <div class="scroll-y" id="gm-cache" style="margin-top:8px;max-height:180px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ MODELS ============ -->
+    <section class="view" id="view-models">
+      <div class="eyebrow">MODEL ROUTING</div>
+      <h1>模型<span>配置</span></h1>
+      <p class="sub">文本、视觉、视频（Omni 全模态）、摘要、语音识别、图像生成（首选 flare / 兜底 z-image-turbo）、语音合成，改完即时生效。</p>
+
+      <div class="card">
+        <h2>模型矩阵 <small>MODEL MATRIX</small></h2>
+        <div class="role-grid" id="md-roles"><div class="empty">加载中…</div></div>
+        <div id="asr-status" class="hint" style="margin-top:10px"></div>
+        <div id="adapt-status" class="hint" style="margin-top:8px"></div>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <h2>编辑模型 <small>EDIT</small></h2>
+          <label class="f"><span>模型类别 ROLE</span>
+            <select id="md-role">
+              <option value="text">文本对话·首选 · TEXT</option>
+              <option value="vision">视觉识别 · VISION</option>
+              <option value="video">视频理解 · Omni · VIDEO</option>
+              <option value="summary">记忆摘要 · SUMMARY</option>
+              <option value="deep">深度模型·6.1-SOL · 长文</option>
+              <option value="sonnet">深度模型·SONNET（长文备胎）</option>
+              <option value="flare">图像生成·首选 · FLARE</option>
+              <option value="image">图像生成·兜底 · QWENIMG</option>
+              <option value="tts">语音合成 · TTS</option>
+              <option value="asr">语音识别 · ASR</option>
+            </select>
+          </label>
+          <label class="f"><span>模型 ID</span><input type="text" id="md-model" placeholder="qwen3.8-flash"></label>
+          <label class="f"><span>接口地址 BASE URL</span><input type="text" id="md-url" placeholder="https://.../v1"></label>
+          <label class="f"><span>API KEY <em style="font-style:normal;color:var(--dim2)">（留空则不修改）</em></span><input type="password" id="md-key" placeholder="sk-..."></label>
+          <div class="inline">
+            <button class="btn primary" id="md-save">保存模型</button>
+            <span class="hint" id="md-msg"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h2>高级参数 <small>ADVANCED</small></h2>
+          <label class="f"><span>最大 TOKEN</span><input type="number" id="md-maxtok" placeholder="2048"></label>
+          <label class="f"><span>超时（秒）</span><input type="number" id="md-timeout" placeholder="120"></label>
+          <label class="f"><span>思考强度 REASONING</span>
+            <select id="md-effort">
+              <option value="">默认（模型自带）</option>
+              <option value="none">关闭思考 none</option>
+              <option value="low">低 low</option>
+              <option value="medium">中 medium</option>
+              <option value="high">高 high</option>
+            </select>
+          </label>
+          <p class="hint">生图、语音、识别只用「模型 ID / 接口地址 / API KEY」，TOKEN 与思考强度对它们无效。</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>生成通道 <small>GENERATION ROUTE</small></h2>
+        <p class="sub">每张卡里从上到下就是真实的降级顺序：<b>① 首选</b> 失败自动换 <b>②</b>，再失败换 <b>③</b>。不用手动切，切了也不算。</p>
+        <div class="route-grid" id="rt-grid"><div class="empty">加载中…</div></div>
+
+        <div class="agent-box">
+          <div class="agent-head">
+            <span>智能体 AGENT</span>
+            <span id="ag-status"><span class="dot"></span>未就绪</span>
+          </div>
+          <div class="grid g2">
+            <label class="f"><span>AGENT ID</span><input type="text" id="ag-id" placeholder="agent_xxx"></label>
+            <label class="f"><span>BASE URL</span><input type="text" id="ag-base" placeholder="https://.../api/v1/agentstudio"></label>
+          </div>
+          <label class="f"><span>API KEY <em style="font-style:normal;color:var(--dim2)">（留空则不修改）</em></span><input type="password" id="ag-key" placeholder="sk-..."></label>
+          <div class="inline">
+            <button class="btn primary" id="ag-save">保存通道</button>
+            <span class="hint" id="ag-msg"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>语音行为 <small>VOICE BEHAVIOR</small></h2>
+        <p class="sub" style="margin-top:0">群友发语音时她怎么处理。识别模型本身在「模型矩阵 · ASR」里改。</p>
+        <div class="st-row"><label>语音回复概率</label>
+          <div class="inline" style="gap:6px">
+            <input type="range" id="asr-chance" min="0" max="100" step="5" value="50" style="flex:1">
+            <b id="asr-chance-v" style="min-width:44px;text-align:right;font-family:var(--mono);color:var(--cyan)">50%</b>
+          </div>
+        </div>
+        <div class="hint" id="asr-chance-desc" style="margin-bottom:10px"></div>
+        <div class="st-row"><label>无意义就忽略</label>
+          <select id="asr-ignore"><option value="1">开启（推荐）</option><option value="0">关闭</option></select></div>
+        <div class="inline" style="margin-top:12px">
+          <button class="btn primary" id="asr-save">保存策略</button>
+          <span class="hint" id="asr-msg"></span>
+        </div>
+        <div id="asr-rules" class="hint" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+        <!-- ============ STYLE ============ -->
+    <section class="view" id="view-style">
+      <div class="eyebrow">STYLE FINGERPRINT</div>
+      <h1>文风<span>指纹</span></h1>
+      <p class="sub">从语料里提取的文风规则与生效策略。</p>
+
+      <div class="grid g2">
+        <div class="card">
+          <h2>文风来源 <small>SOURCES</small></h2>
+          <div id="st-sources"><div class="empty">加载中…</div></div>
+        </div>
+        <div class="card">
+          <h2>参考指纹 <small>REFERENCE BOOK</small></h2>
+          <p class="sub" style="margin-top:0">点一本书就切换到它的指纹，立即生效。</p>
+          <div class="book-list" id="st-books"><div class="empty">加载中…</div></div>
+          <div style="margin-top:12px"><button class="btn" id="st-reload">重新加载语料</button></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>生效策略 <small>POLICY</small></h2>
+        <div class="grid g2">
+          <div>
+            <div class="st-row"><label>文风注入</label>
+              <select id="st-enabled"><option value="1">启用</option><option value="0">关闭</option></select></div>
+            <div class="st-row"><label>长文阈值</label><input type="number" id="st-threshold" min="0" max="1000" placeholder="120"></div>
+            <div class="st-row"><label>每次取样</label><input type="number" id="st-spc" min="0" max="6" placeholder="2"></div>
+          </div>
+          <div>
+            <div class="st-row"><label>暧昧条数上限</label><input type="number" id="st-flirt-lines" min="1" max="12" placeholder="12"></div>
+            <div class="st-row"><label>暧昧条间延迟</label><input type="number" id="st-flirt-gap" min="0.1" max="5" step="0.1" placeholder="0.9"></div>
+            <div class="st-row"><label>暧昧模式</label>
+              <select id="st-flirt-on"><option value="1">启用</option><option value="0">关闭</option></select></div>
+          </div>
+        </div>
+        <div class="inline" style="margin-top:12px">
+          <button class="btn primary" id="st-save">保存策略</button>
+          <span class="hint" id="st-msg"></span>
+        </div>
+        <div id="st-policy" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <h2>人味调节 <small>HUMAN-LIKE</small></h2>
+        <p class="sub" style="margin-top:0">真人的话短、碎、不完整。这里调她有多能说。</p>
+        <div class="st-row"><label>话痨程度</label>
+          <div class="inline" style="gap:6px">
+            <input type="range" id="hu-level" min="1" max="5" step="1" value="3" style="flex:1">
+            <b id="hu-level-v" style="min-width:58px;text-align:right;font-family:var(--mono);color:var(--cyan)">3 正常</b>
+          </div>
+        </div>
+        <div class="hint" id="hu-level-desc" style="margin-bottom:10px"></div>
+        <div class="inline"><button class="btn primary" id="hu-save">保存</button>
+          <span class="hint" id="hu-msg"></span></div>
+        <div id="hu-dist" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <h2>工具箱 <small>TOOLS</small></h2>
+        <p class="sub" style="margin-top:0">提需求时她会真的去调这些，不是嘴上说说。</p>
+        <div id="tool-status" class="hint" style="margin-bottom:10px"></div>
+        <div id="tool-routing" style="margin-bottom:12px"></div>
+        <div class="tool-grid" id="tool-grid"><div class="empty">加载中…</div></div>
+        <div class="inline" style="margin-top:12px">
+          <select id="tool-pick" style="max-width:170px"></select>
+          <input type="text" id="tool-q" placeholder="试一句（比如：帮我算一卦）" style="flex:1">
+          <button class="btn sm" id="tool-run">试跑</button>
+          <span class="hint" id="tool-msg"></span>
+        </div>
+        <pre id="tool-out"></pre>
+      </div>
+
+      <div class="card">
+        <h2>消耗与缓存 <small>COST &amp; CACHE</small></h2>
+        <p class="sub" style="margin-top:0">服务端有隐式上下文缓存，静态前缀命中越多越省钱。</p>
+        <div class="grid g4" id="cost-cards"><div class="empty">加载中…</div></div>
+        <div class="inline" style="margin-top:12px">
+          <button class="btn sm" id="cost-reset">清零重计</button>
+          <span class="hint" id="cost-msg"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>画图流程 <small>DRAW PIPELINE</small></h2>
+        <p class="sub" style="margin-top:0">她画图前一定先查资料，查完先说一声，说得不对你可以喊停。</p>
+        <div class="dw-flow" id="dw-flow"></div>
+        <div id="dw-pending"></div>
+        <div id="dw-stats" class="hint" style="margin-bottom:8px"></div>
+        <div id="dw-list"><div class="empty">还没有画过</div></div>
+      </div>
+
+      <div class="card">
+        <h2>调用记录 <small>CALL LOG</small></h2>
+        <div id="tool-stats" class="hint" style="margin-bottom:8px"></div>
+        <div id="tool-log"><div class="empty">还没有记录</div></div>
+      </div>
+
+      <div class="card">
+        <h2>提示词预览 <small>REAL PROMPT</small></h2>
+        <p class="sub" style="margin-top:0">先看真的：下面是她这次发消息前<strong>实际收到</strong>的那一整份（bot 每轮落一份快照）。没快照时会说是没快照，不拿文风块冒充。</p>
+        <div class="inline" style="margin-bottom:12px">
+          <select id="st-scope" style="max-width:160px">
+            <option value="group">群聊</option>
+            <option value="dm">私聊</option>
+          </select>
+          <select id="st-mode" style="max-width:180px">
+            <option value="chat">chat（水群）</option>
+            <option value="long">long（长文）</option>
+          </select>
+          <button class="btn sm" id="st-preview-btn">取真实提示词</button>
+          <span class="hint" id="st-preview-msg"></span>
+        </div>
+        <pre id="st-preview" style="white-space:pre-wrap;font-family:var(--mono);font-size:11.5px;color:#a9c4d8;max-height:360px;overflow:auto;background:#070e15;border:1px solid var(--line);padding:13px">尚未生成</pre>
+      </div>
+    </section>
+
+    <!-- ============ MONITOR ============ -->
+    <section class="view" id="view-advanced">
+      <div class="eyebrow">ADVANCED TUNING</div>
+      <h1>高级<span>设置</span></h1>
+      <p class="sub">这里改的参数点保存后由运行中的进程直接接走，<b>不需要重启机器人</b>；收件每 2 秒排空一次，最长等 2 秒。</p>
+
+      <div class="card">
+        <h2>说话节奏 <small>REPLY RHYTHM</small></h2>
+        <p class="sub" style="margin-top:0">控制她多爱接话、接得多快。调大 = 更安静，调小 = 更活跃。</p>
+        <div class="grid g2">
+          <div>
+            <div class="st-row"><label title="说完一句后，多少秒内不再主动接话">接话冷却（秒）</label>
+              <input type="number" id="ad-cool" min="5" max="600" step="1" placeholder="12"></div>
+            <div class="st-row"><label title="每多少条群消息，才考虑一次要不要接话">每 N 条考虑</label>
+              <input type="number" id="ad-every" min="1" max="100" step="1" placeholder="6"></div>
+            <div class="st-row"><label title="满足条件时，接话的概率">接话概率（0~1）</label>
+              <input type="number" id="ad-prob" min="0" max="1" step="0.05" placeholder="0.8"></div>
+          </div>
+          <div>
+            <div class="st-row"><label title="连续多少条没说话，就强制说一句">强制说话（条）</label>
+              <input type="number" id="ad-force" min="1" max="200" step="1" placeholder="8"></div>
+            <div class="st-row"><label title="消息连着来时，等几秒再处理，避免刷屏">防抖延迟（秒）</label>
+              <input type="number" id="ad-debounce" min="0" max="60" step="0.5" placeholder="2"></div>
+            <div class="st-row"><label title="至少要有几条真人消息，她才允许开口">最少真人消息</label>
+              <input type="number" id="ad-minhuman" min="1" max="50" step="1" placeholder="1"></div>
+          </div>
+        </div>
+        <div class="st-row"><label>自动接话总开关</label>
+          <select id="ad-enabled"><option value="1">启用</option><option value="0">关闭</option></select></div>
+      </div>
+
+      <div class="card">
+        <h2>巡群与上下文 <small>PATROL</small></h2>
+        <p class="sub" style="margin-top:0">巡群只是<b>检查有没有新消息</b>；没有新消息不会调模型，几乎不花钱。</p>
+        <div class="grid g2">
+          <div>
+            <div class="st-row"><label title="每隔多少秒检查一次群消息">巡群间隔（秒）</label>
+              <input type="number" id="ad-interval" min="10" max="86400" step="10" placeholder="100"></div>
+            <div class="st-row"><label title="每轮巡群最多检查几个群">每轮最多群数</label>
+              <input type="number" id="ad-maxgroups" min="1" max="100" step="1" placeholder="20"></div>
+          </div>
+          <div>
+            <div class="st-row"><label title="注入 prompt 的最近群消息条数">群上下文条数</label>
+              <input type="number" id="ad-ctx" min="3" max="40" step="1" placeholder="10"></div>
+            <div class="st-row"><label>定时巡群开关</label>
+              <select id="ad-patrol"><option value="1">启用</option><option value="0">关闭</option></select></div>
+          </div>
+        </div>
+        <div class="hint" id="ad-est" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card">
+        <h2>自主次数 <small>AUTONOMY · 热加载</small></h2>
+        <p class="sub" style="margin-top:0">她自己刷视频、自己查东西、主动跟你讲的额度。改完点下面「保存并生效」，<b>不用重启</b>：
+          数值最长 2 秒就被运行中的进程接走，但要等下一轮自主动作才用得上——
+          刷 B 站约 1 分钟一轮，自主搜索约 1 小时一轮（各自 worker 的轮询间隔）。
+          已经在跑的那一次不会被中途改数；只有「间隔」类参数最长 5 秒重读一次。</p>
+        <div class="grid g2">
+          <div>
+            <div class="st-row"><label title="她每天自己从 B 站热门里挑几条看（9–23 点之间）">每天自己刷 B 站（条）</label>
+              <input type="number" id="ad-bili-max" min="0" max="20" step="1" placeholder="5"></div>
+            <div class="st-row"><label title="两条视频之间至少隔几个小时">刷视频间隔（小时）</label>
+              <input type="number" id="ad-bili-gap" min="0.5" max="12" step="0.5" placeholder="2"></div>
+            <div class="st-row"><label title="她每天自己查几次（拆词 + 搜索 + 把真看懂的记进知识库）">每天自己查（次）</label>
+              <input type="number" id="ad-cur-max" min="0" max="20" step="1" placeholder="5"></div>
+          </div>
+          <div>
+            <div class="st-row"><label title="主动私聊跟你讲的上限。这是打扰预算，不是她的活动预算">每天主动讲给你（条）</label>
+              <input type="number" id="ad-share-max" min="0" max="10" step="1" placeholder="1"></div>
+            <div class="st-row"><label title="两次主动分享之间至少隔几个小时">分享间隔（小时）</label>
+              <input type="number" id="ad-share-gap" min="1" max="48" step="1" placeholder="6"></div>
+          </div>
+        </div>
+        <div class="hint" id="ad-auto-note" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card">
+        <h2>回复长度 <small>LENGTH</small></h2>
+        <div class="grid g2">
+          <div>
+            <div class="st-row"><label>每条字数上限</label>
+              <input type="number" id="ad-chars" min="15" max="600" step="5" placeholder="45"></div>
+            <div class="st-row"><label>token 上限</label>
+              <input type="number" id="ad-tokens" min="30" max="800" step="10" placeholder="140"></div>
+          </div>
+          <div>
+            <div class="st-row"><label title="一条回复拆成几条气泡发">气泡条数</label>
+              <input type="number" id="ad-bubbles" min="1" max="3" step="1" placeholder="3"></div>
+            <div class="st-row"><label title="气泡之间的间隔，越小越像一次说完">气泡间隔（毫秒）</label>
+              <input type="number" id="ad-delay" min="50" max="10000" step="50" placeholder="200"></div>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:6px">
+          上面这两个只管<b>水群接话</b>。办事的交代走下面单独一档，不受这里限制。
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>办事汇报长度 <small>REPORT</small></h2>
+        <div class="grid g2">
+          <div>
+            <div class="st-row"><label title="她替你查完资料、算完塔罗之后那条交代，单条气泡的上限">每条字数上限</label>
+              <input type="number" id="ad-report-chars" min="50" max="400" step="10" placeholder="200"></div>
+            <div class="st-row"><label title="交代一共分几条气泡发出去">气泡条数</label>
+              <input type="number" id="ad-report-bubbles" min="1" max="3" step="1" placeholder="2"></div>
+          </div>
+          <div>
+            <div class="st-row"><label title="整段交代的硬顶：超过就在句子边界收住，不硬切在半句话上">总字数上限</label>
+              <input type="number" id="ad-report-max" min="100" max="400" step="10" placeholder="300"></div>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:6px">
+          有人点名让她<b>办事</b>（查资料、抽塔罗、算一卦）时，她先接一句、后台去办，办完再回来交代一次。
+          这种交代走上面这一档，可以写两三百字，不会被水群的三五十字截走；
+          上限封在 300 字（<b>300</b>）以内，宁可少说也不要断在半句话上。
+          没办成也会来说一声，不会算完就把结果咽下去。
+        </div>
+      </div>
+
+      <div class="inline" style="margin-top:4px">
+        <button class="btn primary" id="ad-save">保存并生效</button>
+        <button class="btn" id="ad-reload">重新读取</button>
+        <span class="hint" id="ad-msg"></span>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        提示：保存后由控制层通过 inbox 指令下发给运行中的进程；收件每 2 秒排空一次，<b>最长 2 秒</b>落到运行中的参数上。
+        如果提示「设置已变化」，点「重新读取」再保存即可。
+      </div>
+    </section>
+
+<section class="view" id="view-monitor">
+      <div class="eyebrow">RUNTIME MONITOR</div>
+      <h1>运行<span>监控</span></h1>
+      <p class="sub">连接状态、消息统计、系统资源与最近事件。</p>
+
+      <div class="grid g2">
+        <div class="card"><h2>连接状态 <small>LINK</small></h2><div id="mo-conn"></div></div>
+        <div class="card"><h2>消息统计 <small>TRAFFIC</small></h2><div id="mo-msg"></div></div>
+      </div>
+      <div class="grid g3">
+        <div class="card"><div class="bar-lab"><span>CPU</span><b id="mo-cpu-v">--</b></div><div class="bar" id="mo-cpu-b"><i style="width:0"></i></div></div>
+        <div class="card"><div class="bar-lab"><span>内存</span><b id="mo-mem-v">--</b></div><div class="bar am" id="mo-mem-b"><i style="width:0"></i></div></div>
+        <div class="card"><div class="bar-lab"><span>磁盘</span><b id="mo-disk-v">--</b></div><div class="bar rd" id="mo-disk-b"><i style="width:0"></i></div></div>
+      </div>
+      <div class="card">
+        <h2>最近事件 <small>EVENTS</small></h2>
+        <div class="tbl-wrap"><table class="t" id="mo-events"></table></div>
+      </div>
+    </section>
+
+    <!-- ============ EMOJIS ============ -->
+    <section class="view" id="view-emojis">
+      <div class="eyebrow">EMOTE LIBRARY</div>
+      <h1>表情<span>库</span></h1>
+      <p class="sub">她发表情用的就是这一个库：群里收来的梗图 + 从 QQ 收藏搬进来的，同一套去重、同一个发送池。</p>
+
+      <div class="card">
+        <h2>她的斗图库 <small id="em-stk-n">--</small></h2>
+        <p class="sub" id="em-src-line">库里就是她发得出的一切。自动收图每天有上限，QQ 收藏每半小时搬一次，按内容去重。</p>
+        <p class="hint" id="em-stk-hint">点任意一张 = 弹出<b>悬浮窗</b>，里面是她当前对这张图的理解。
+          <b>人工筛选（删）和认知校准（改）都在那个悬浮窗里做</b>：
+          几百条总结铺在格子里没法看，也没法一张张点。</p>
+        <div class="inline" style="margin-bottom:12px">
+          <input type="text" id="em-stk-search" placeholder="搜标签、含义或备注…" style="max-width:240px">
+          <button type="button" class="chip on" data-src="">全部来源</button>
+          <button type="button" class="chip" data-src="QQ收藏">QQ 收藏</button>
+          <button type="button" class="chip" data-src="群里">群里收的</button>
+          <button type="button" class="chip" data-src="已校准">我校准过的</button>
+        </div>
+        <div class="emoji-grid" id="em-stickers"><div class="empty">加载中…</div></div>
+      </div>
+      <div class="card">
+        <h2>内置表情 <small>BUILT-IN</small></h2>
+        <p class="sub">QQ 自带的小黄脸，走文字表情码，不是图片，和上面那个库是两回事。</p>
+        <div class="inline" style="margin-bottom:12px">
+          <input type="text" id="em-search" placeholder="搜索表情名…" style="max-width:260px">
+        </div>
+        <div class="emoji-grid" id="em-builtin"><div class="empty">加载中…</div></div>
+      </div>
+
+      <!-- 表情卡的悬浮窗：一次只看一张。人工筛选与认知校准都在这里做。 -->
+      <div class="stk-mask" id="stk-mask">
+        <div class="stk-pop" role="dialog" aria-modal="true" aria-labelledby="stk-title">
+          <button class="stk-x btn" id="stk-close" type="button" aria-label="关闭">×</button>
+          <div class="stk-head">
+            <div class="stk-preview"><img id="stk-img" alt="选中的表情包"></div>
+            <div class="stk-id">
+              <h3 id="stk-title">这张表情</h3>
+              <div class="stk-meta" id="stk-meta"></div>
+            </div>
+          </div>
+          <label class="f">
+            <span>她对这张的理解（改完她下次就按这句说）</span>
+            <textarea id="stk-meaning" rows="3" maxlength="80"
+                      placeholder="例如：这张是「无语」，不是「惊讶」"></textarea>
+            <small class="hint" id="stk-meaning-src">她还没看懂过这张</small>
+          </label>
+          <div class="inline">
+            <button class="btn primary" id="stk-save" type="button">保存这条理解</button>
+            <button class="btn" id="stk-del" type="button">从库里删掉这张</button>
+            <span class="hint" id="stk-msg"></span>
+          </div>
+          <div class="stk-confirm" id="stk-confirm">
+            <b>确认删掉这张？</b>
+            <span class="hint">文件移进回收目录（不直接抹掉），点错了还能捞回来；
+              但索引立刻消失，她下一次就抽不到这张了。</span>
+            <div class="inline">
+              <button class="btn danger" id="stk-del-yes" type="button">确认删除</button>
+              <button class="btn" id="stk-del-no" type="button">取消</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ VISITS ============ -->
+    <section class="view" id="view-visits">
+      <div class="eyebrow">AUDIENCE ANALYTICS</div>
+      <h1>访客<span>分析</span></h1>
+      <p class="sub">网站访问量、独立 IP 与近七日趋势。</p>
+
+      <div class="grid g4" style="margin-bottom:16px">
+        <div class="stat cy"><div class="k">TOTAL</div><div class="v" id="vs-total">--</div><div class="f">累计访问</div></div>
+        <div class="stat"><div class="k">UNIQUE IP</div><div class="v" id="vs-ips">--</div><div class="f">不同 IP（不是人数）</div></div>
+        <div class="stat gr"><div class="k">TODAY</div><div class="v" id="vs-today">--</div><div class="f">滚动 24 小时内</div></div>
+        <div class="stat am"><div class="k">SHARED LOC</div><div class="v" id="vs-loc">--</div><div class="f">主动共享位置的记录</div></div>
+      </div>
+
+      <div class="card">
+        <h2>近七日趋势 <small>DAILY VISITS</small></h2>
+        <p class="sub" style="margin-top:0" id="vs-note">一条 = 一次 GET 页面请求（后台与接口路径不记）；同一 IP + 同一页面 60 秒内只记一条。</p>
+        <div id="vs-trend" class="line-chart"></div>
+        <div class="hint" id="vs-trend-sum"></div>
+      </div>
+
+      <div class="card">
+        <h2>最近访问 <small>RECENT</small></h2>
+        <div class="tbl-wrap"><table class="t" id="vs-table"></table></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast"></div>
+<!-- 逻辑一律放 console.js：这段代码以前写在带 src 的 <script> 元素里，
+     浏览器不会执行元素内容，「她自己看过什么」和发图面板因此永远停在初始状态。 -->
+<script defer src="/admin/assets/console.js?v={{ASSET_VER}}"></script>
+</body>
+</html>

@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QQ AI 机器人控制台</title>
+<style>
+:root {
+  --bg: #0a1628;
+  --panel: #111d2e;
+  --border: #263849;
+  --text: #d7e8f5;
+  --text-dim: #8fa4bb;
+  --accent: #7bd9e7;
+  --accent-bg: #173b46;
+  --success: #82dbcb;
+  --error: #ffb398;
+  --btn: #1a3040;
+  --btn-hover: #234050;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+header h1 { font-size: 24px; color: var(--accent); }
+header .status { display: flex; gap: 12px; align-items: center; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
+.status-dot.online { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+.status-dot.offline { background: #f87171; }
+
+/* Navigation */
+nav.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 24px; overflow-x: auto; }
+nav.tabs button { background: none; border: none; color: var(--text-dim); padding: 12px 20px; cursor: pointer; font-size: 14px; white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+nav.tabs button:hover { color: var(--text); background: rgba(123,217,231,0.05); }
+nav.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Panels */
+.panel { display: none; animation: fadeIn 0.3s; }
+.panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+.card h2 { font-size: 18px; margin-bottom: 16px; color: var(--accent); }
+.card h3 { font-size: 14px; color: var(--text-dim); margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 1px; }
+
+/* Form elements */
+label { display: block; color: var(--text-dim); font-size: 13px; margin: 12px 0 6px; }
+input[type="text"], input[type="password"], input[type="number"], textarea, select {
+  width: 100%; padding: 12px; background: #0b1421; border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit;
+  transition: border-color 0.2s;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+textarea { min-height: 120px; resize: vertical; font-family: ui-monospace, monospace; line-height: 1.8; }
+
+button.btn { padding: 10px 20px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--btn); color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.2s; }
+button.btn:hover { background: var(--btn-hover); border-color: var(--accent); }
+button.btn.primary { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+button.btn.primary:hover { background: #1e4d5a; }
+button.btn.danger { border-color: #805041; color: var(--error); }
+button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+/* Grid layouts */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+/* Persona presets */
+.preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.preset-card { background: #0d1826; border: 1px solid var(--border); border-radius: 10px; padding: 16px; cursor: pointer; transition: all 0.2s; }
+.preset-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.preset-card.selected { border-color: var(--accent); background: var(--accent-bg); }
+.preset-card h4 { font-size: 14px; margin-bottom: 6px; }
+.preset-card p { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+
+/* Emoji picker */
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; padding: 8px; background: #0b1421; border-radius: 8px; border: 1px solid var(--border); }
+.emoji-item { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--text-dim); transition: all 0.15s; border: 1px solid transparent; }
+.emoji-item:hover { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+
+/* Model cards */
+.model-card { background: linear-gradient(135deg, #112330, #101824); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.model-card .tag { font-size: 10px; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; }
+.model-card h3 { font-size: 16px; margin: 8px 0; color: var(--text); text-transform: none; letter-spacing: 0; }
+.model-info { font-size: 12px; color: var(--text-dim); margin: 4px 0; }
+.model-info span { color: var(--text); }
+
+/* Memory list */
+.memory-item { padding: 12px; border-bottom: 1px solid var(--border); }
+.memory-item:last-child { border-bottom: none; }
+.memory-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+.memory-text { font-size: 13px; line-height: 1.6; word-break: break-all; }
+
+/* Status messages */
+.msg { font-size: 12px; padding: 8px 12px; border-radius: 6px; margin-top: 8px; }
+.msg.success { background: rgba(130,219,203,0.1); color: var(--success); }
+.msg.error { background: rgba(255,179,152,0.1); color: var(--error); }
+.msg.info { background: rgba(123,217,231,0.1); color: var(--accent); }
+
+/* Slider */
+.slider-group { display: flex; align-items: center; gap: 12px; }
+.slider-group input[type="range"] { flex: 1; accent-color: var(--accent); }
+.slider-group .value { min-width: 40px; text-align: right; font-size: 13px; color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>🤖 QQ AI 机器人控制台</h1>
+      <p style="color:var(--text-dim);font-size:13px;margin-top:4px">性格 · 记忆 · 模型 · 监控</p>
+    </div>
+    <div class="status">
+      <span id="status-text" style="font-size:13px;color:var(--text-dim)">检测中...</span>
+      <div class="status-dot" id="status-dot"></div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="active" data-tab="personality">🎭 性格调整</button>
+    <button data-tab="memory">🧠 记忆管理</button>
+    <button data-tab="models">⚙️ 模型配置</button>
+    <button data-tab="style">✍️ 文风指纹</button>
+    <button data-tab="monitor">📊 运行监控</button>
+    <button data-tab="emojis">😊 表情库</button>
+  </nav>
+
+  <!-- Personality Panel -->
+  <div class="panel active" id="panel-personality">
+    <div class="card">
+      <h2>🎭 性格预设</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px">选择一个预设快速切换性格，或在下方自定义编辑</p>
+      <div class="preset-grid" id="preset-grid"></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h2>🎭 人设模式</h2>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px">切换机器人对外人格。示例人格=内置演示角色；通用=普通助手（可用下方自定义提示词）。</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <button class="btn primary" id="mode-whale">🐋 示例人格</button>
+          <button class="btn" id="mode-generic">🤖 通用助手</button>
+        </div>
+        <div id="persona-mode-note" style="font-size:12px;color:var(--accent);min-height:18px"></div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+        <h2>✏️ 自定义性格设定 <span style="font-size:12px;color:var(--text-dim)">（仅“通用助手”模式下生效）</span></h2>
+        <label for="persona-name">角色名称</label>
+        <input type="text" id="persona-name" placeholder="例如：小助手">
+        <label for="persona-text">系统提示词 (System Prompt)</label>
+        <textarea id="persona-text" rows="12" placeholder="定义 AI 的性格、说话风格、行为规则..."></textarea>
+        <label for="trigger-words">触发词（逗号分隔）</label>
+        <input type="text" id="trigger-words" placeholder="小助手,助手,AI">
+        <div class="btn-group">
+          <button class="btn primary" id="save-personality">💾 保存性格设定</button>
+          <button class="btn" id="preview-personality">👁️ 预览效果</button>
+          <button class="btn" id="verify-applied">🔍 验证是否生效</button>
+          <button class="btn" id="reset-personality">↩️ 恢复默认</button>
+        </div>
+        <div id="personality-msg"></div>
+        <div id="applied-status" style="font-size:12px;color:var(--text-dim);line-height:1.9;margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#0b1421;display:none"></div>
+      </div>
+      <div class="card">
+        <h2>🔧 回复参数</h2>
+        <label>回复长度偏好</label>
+        <div class="slider-group">
+          <input type="range" id="reply-length" min="15" max="300" step="5" value="40">
+          <span class="value" id="reply-length-val">40字</span>
+        </div>
+        <label>每次最多发送条数</label>
+        <div class="slider-group">
+          <input type="range" id="reply-bubbles" min="1" max="5" value="2">
+          <span class="value" id="reply-bubbles-val">2条</span>
+        </div>
+        <label>消息间隔（毫秒）</label>
+        <div class="slider-group">
+          <input type="range" id="reply-delay" min="200" max="3000" step="100" value="700">
+          <span class="value" id="reply-delay-val">700ms</span>
+        </div>
+        <label>上下文轮数</label>
+        <div class="slider-group">
+          <input type="range" id="context-rounds" min="4" max="30" value="12">
+          <span class="value" id="context-rounds-val">12轮</span>
+        </div>
+        <label>温度 (Temperature)</label>
+        <div class="slider-group">
+          <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+          <span class="value" id="temperature-val">0.7</span>
+        </div>
+        <h3>开关</h3>
+        <label><input type="checkbox" id="patrol-enabled" checked> 启用自动巡群</label>
+        <label><input type="checkbox" id="memory-enabled" checked> 启用自动记忆整理</label>
+        <label><input type="checkbox" id="emoji-enabled" checked> 启用表情解析</label>
+        <div class="btn-group">
+          <button class="btn" id="preset-casual">💬 水群极简（20字/1条）</button>
+          <button class="btn" id="preset-normal">🙂 日常适中（40字/2条）</button>
+          <button class="btn" id="preset-rich">📝 详细一点（120字/3条）</button>
+        </div>
+        <div class="btn-group">
+          <button class="btn primary" id="save-settings">💾 保存并生效</button>
+          <button class="btn" id="verify-settings">🔍 验证是否生效</button>
+        </div>
+        <div id="settings-msg"></div>
+        <div id="settings-applied" style="font-size:12px;color:var(--text-dim);line-height:1.9;margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#0b1421;display:none"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memory Panel -->
+  <div class="panel" id="panel-memory">
+    <div class="card">
+      <h2>💬 对话记忆（每个人的私聊 / 每个群）</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px">机器人真实记住的对话上下文。点开某人可查看完整往来，长期记忆就在这里。</p>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+        <button class="btn" id="refresh-conv">🔄 刷新列表</button>
+        <span id="conv-count" style="color:var(--text-dim);font-size:12px"></span>
+      </div>
+      <div id="conv-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px"></div>
+      <div id="conv-detail" style="display:none;margin-top:16px">
+        <h3 id="conv-title">对话记录</h3>
+        <div id="conv-turns" style="max-height:420px;overflow-y:auto;background:#0b1421;border:1px solid var(--border);border-radius:8px;padding:12px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>🧠 群记忆管理</h2>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
+        <select id="memory-group-select" style="flex:1">
+          <option value="">选择群组...</option>
+        </select>
+        <button class="btn" id="refresh-memory">🔄 刷新</button>
+      </div>
+      <div id="memory-content" style="display:none">
+        <div class="grid-2">
+          <div>
+            <h3>长期记忆摘要</h3>
+            <textarea id="memory-editor" rows="15"></textarea>
+            <div class="btn-group">
+              <button class="btn primary" id="save-memory">💾 保存记忆</button>
+              <button class="btn danger" id="clear-memory">🗑️ 清空</button>
+              <button class="btn" id="rebuild-memory">🔄 重建</button>
+            </div>
+            <div id="memory-msg"></div>
+          </div>
+          <div>
+            <h3>记忆统计</h3>
+            <div id="memory-stat" style="font-size:13px;line-height:1.9;color:var(--text-dim)"></div>
+            <div id="memory-stats" style="font-size:13px;color:var(--text-dim);line-height:2"></div>
+            <h3>最近消息缓存</h3>
+            <div id="cache-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Models Panel -->
+  <div class="panel" id="panel-models">
+    <div class="grid-3" id="model-cards-container"></div>
+    <div class="card">
+      <h2>➕ 添加 / 修改模型</h2>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn primary" onclick="fillModel('text','qwen3.8-flash')">⚡ Qwen3.8-Flash (文本·默认)</button>
+        <button class="btn primary" onclick="fillModel('vision','qwen3.8-flash')">👁️ Qwen3.8-Flash (视觉·默认)</button>
+        <button class="btn" onclick="fillModel('summary','qwen3.8-flash')">📋 Qwen3.8-Flash (摘要)</button>
+        <button class="btn" onclick="fillModel('vision','qwen-vl-max')">Qwen-VL-Max (旧视觉)</button>
+        <button class="btn" onclick="fillModel('text','deepseek-chat');document.getElementById('model-url').value='https://api.deepseek.com'">🔷 DeepSeek</button>
+        <button class="btn" onclick="fillModel('text','glm-4-flash');document.getElementById('model-url').value='https://open.bigmodel.cn/api/paas'">🟢 GLM-4-Flash</button>
+      </div>
+      <div class="grid-2">
+        <div>
+          <label>角色</label>
+          <select id="model-role" onchange="onRoleChange()">
+            <option value="text">文本模型（主对话）</option>
+            <option value="vision">视觉模型（图片理解）</option>
+            <option value="summary">摘要模型（记忆压缩）</option>
+          </select>
+          <label>API Base URL</label>
+          <input type="text" id="model-url" placeholder="https://dashscope.aliyuncs.com/compatible-mode" value="https://dashscope.aliyuncs.com/compatible-mode">
+          <label>API Key</label>
+          <input type="password" id="model-key" placeholder="sk-your-qwen-api-key">
+          <label>模型名称</label>
+          <input type="text" id="model-name" placeholder="qwen3.8-flash" value="qwen3.8-flash">
+        </div>
+        <div>
+          <label>最大 Token 数</label>
+          <input type="number" id="model-tokens" value="2048" min="256" max="32768">
+          <label>超时（秒）</label>
+          <input type="number" id="model-timeout" value="120" min="10" max="600">
+          <label>思考强度 (Reasoning Effort)</label>
+          <select id="model-effort">
+            <option value="" selected>Default（跟随模型默认）</option>
+            <option value="none">None / Minimal（关闭深度思考）</option>
+            <option value="low">Low（低）</option>
+            <option value="medium">Medium（中）</option>
+            <option value="high">High（高）</option>
+          </select>
+          <div class="btn-group" style="margin-top:24px">
+            <button class="btn primary" id="test-model">🧪 测试连接</button>
+            <button class="btn primary" id="save-model">💾 保存配置</button>
+          </div>
+          <div id="model-msg"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Style / Fingerprint Panel -->
+  <div class="panel" id="panel-style">
+    <div class="card">
+      <h2>✍️ 文风指纹来源</h2>
+      <div id="style-source" style="font-size:13px;line-height:2;color:var(--text-dim)">读取中...</div>
+      <div class="btn-group"><button class="btn" id="style-reload">🔄 重新扫描语料池</button></div>
+      <div id="style-msg"></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>📖 默认书目</h2>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px">指纹按书定制，切换后所有输出的段落粒度、省略号字形、破折号、对话标签配额随之改变。</p>
+        <label for="style-book">当前书目</label>
+        <select id="style-book"></select>
+        <div id="book-profile" style="margin-top:16px;font-size:12.5px;line-height:1.9;color:var(--text-dim)"></div>
+        <div class="btn-group"><button class="btn primary" id="save-book">💾 应用此书目</button></div>
+      </div>
+
+      <div class="card">
+        <h2>🎚️ 生效策略</h2>
+        <label><input type="checkbox" id="style-enabled" checked> 启用文风注入（关闭后模型不再参考语料与指纹）</label>
+        <label>长消息判定阈值（字符数，超过则走完整小说文风）</label>
+        <div class="slider-group">
+          <input type="range" id="style-threshold" min="0" max="400" step="10" value="40">
+          <span class="value" id="style-threshold-val">40字</span>
+        </div>
+        <label>每次注入的亲笔原文范例数量</label>
+        <div class="slider-group">
+          <input type="range" id="style-samples" min="0" max="6" step="1" value="2">
+          <span class="value" id="style-samples-val">2段</span>
+        </div>
+        <p style="color:var(--text-dim);font-size:12px;margin-top:10px">短消息只挂「对话写法 + 口癖红线」，不套小说排版；长消息加载完整分书指纹、弯引号缩进规范与章末钩子要求。</p>
+        <div class="btn-group"><button class="btn primary" id="save-style-policy">💾 保存策略</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🔍 预览将注入给模型的提示词</h2>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn" id="preview-chat">短消息模式 (chat)</button>
+        <button class="btn" id="preview-long">长文模式 (long)</button>
+      </div>
+      <textarea id="style-preview" rows="16" readonly placeholder="点击上方按钮生成实际注入内容"></textarea>
+      <p style="color:var(--text-dim);font-size:12px;margin-top:8px">此处显示的就是模型真实收到的文风约束块，改完设定可随时复核。</p>
+    </div>
+  </div>
+
+  <!-- Monitor Panel -->
+  <div class="panel" id="panel-monitor">
+    <div class="grid-3">
+      <div class="card">
+        <h2>📡 连接状态</h2>
+        <div id="monitor-connection" style="font-size:13px;line-height:2"></div>
+      </div>
+      <div class="card">
+        <h2>📈 消息统计</h2>
+        <div id="monitor-messages" style="font-size:13px;line-height:2"></div>
+      </div>
+      <div class="card">
+        <h2>🖥️ 系统资源</h2>
+        <div id="monitor-system" style="font-size:13px;line-height:2"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>📋 最近事件</h2>
+      <div id="monitor-events" style="max-height:400px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Emoji Panel -->
+  <div class="panel" id="panel-emojis">
+    <div class="card">
+      <h2>🖼️ 我的斗图表情包（QQ 收藏）</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px">这些是你 QQ 里收藏的表情包，机器人群里用 <code>/斗图</code> 会随机抽一张发出去。点图可预览。</p>
+      <div class="btn-group" style="margin-bottom:12px"><button class="btn" id="refresh-faces">🔄 刷新列表</button></div>
+      <div id="qq-faces-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px"></div>
+      <div id="qq-faces-msg" class="msg info" style="display:none"></div>
+    </div>
+    <div class="card">
+      <h2>😊 QQ 内置小表情</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px">点击复制标签，可在性格设定或回复中直接使用</p>
+      <input type="text" id="emoji-search" placeholder="搜索表情..." style="margin-bottom:12px">
+      <div class="emoji-grid" id="emoji-grid"></div>
+      <div id="emoji-copy-msg" class="msg info" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Model quick-fill helpers
+const QWEN_BASE = 'https://dashscope.aliyuncs.com/compatible-mode';
+const DEFAULT_MODEL = 'qwen3.8-flash';
+const MODEL_DEFAULTS = {
+  text: { url: QWEN_BASE, model: DEFAULT_MODEL, tokens: 2048, timeout: 120, effort: '' },
+  vision: { url: QWEN_BASE, model: DEFAULT_MODEL, tokens: 2048, timeout: 120, effort: '' },
+  summary: { url: QWEN_BASE, model: DEFAULT_MODEL, tokens: 2048, timeout: 300, effort: '' },
+};
+
+function fillModel(role, model) {
+  document.getElementById('model-role').value = role;
+  const defaults = MODEL_DEFAULTS[role] || MODEL_DEFAULTS.text;
+  document.getElementById('model-url').value = defaults.url;
+  document.getElementById('model-name').value = model || defaults.model;
+  document.getElementById('model-tokens').value = defaults.tokens;
+  document.getElementById('model-timeout').value = defaults.timeout;
+  document.getElementById('model-effort').value = defaults.effort; // '' = Default
+}
+
+function onRoleChange() {
+  const role = document.getElementById('model-role').value;
+  const defaults = MODEL_DEFAULTS[role] || MODEL_DEFAULTS.text;
+  document.getElementById('model-url').value = defaults.url;
+  document.getElementById('model-name').value = defaults.model;
+  document.getElementById('model-tokens').value = defaults.tokens;
+  document.getElementById('model-timeout').value = defaults.timeout;
+  document.getElementById('model-effort').value = defaults.effort;
+}
+
+// Tab switching
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// Slider value display
+['reply-length','reply-bubbles','reply-delay','context-rounds','temperature'].forEach(id => {
+  const el = document.getElementById(id);
+  const valEl = document.getElementById(id + '-val');
+  if (el && valEl) {
+    const suffix = id.includes('length') ? '字' : id.includes('bubbles') ? '条' : id.includes('delay') ? 'ms' : id.includes('rounds') ? '轮' : '';
+    el.addEventListener('input', () => valEl.textContent = el.value + suffix);
+  }
+});
+
+// Personality presets
+const PRESETS = [
+  { name: '友善助手', persona: '你是群聊里的 AI 助手。说话自然、友善、简洁。适当使用表情让对话更生动。', icon: '😊' },
+  { name: '古风文人', persona: '你是一位温文尔雅的古风文人。说话带有古意，用词典雅，但不晦涩。偶尔引用诗词。', icon: '📜' },
+  { name: '毒舌吐槽', persona: '你是一个毒舌但有趣的群友。回复犀利幽默，但不伤人。善用反讽和夸张。', icon: '😏' },
+  { name: '技术大佬', persona: '你是一位资深技术专家。回答技术问题准确专业，非技术问题简短有趣。代码用代码块。', icon: '💻' },
+  { name: '可爱萌系', persona: '你是一个可爱的 AI 小伙伴！说话活泼元气，喜欢用颜文字和表情~ 但不要过度卖萌哦！', icon: '🌸' },
+  { name: '冷幽默', persona: '你说话冷淡但暗藏幽默。回复简短精辟，像是一个见多识广的老群友。不主动热情但有问必答。', icon: '🧊' },
+];
+
+const presetGrid = document.getElementById('preset-grid');
+PRESETS.forEach((p, i) => {
+  const card = document.createElement('div');
+  card.className = 'preset-card';
+  card.innerHTML = '<h4>' + p.icon + ' ' + p.name + '</h4><p>' + p.persona.slice(0, 60) + '...</p>';
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    document.getElementById('persona-text').value = p.persona;
+    document.getElementById('persona-name').value = p.name;
+  });
+  presetGrid.appendChild(card);
+});
+
+// Emoji data
+const EMOJIS = [
+  ['微笑',0],['撇嘴',1],['色',2],['发呆',3],['得意',4],['流泪',5],['害羞',6],['闭嘴',7],
+  ['睡',8],['大哭',9],['尴尬',10],['发怒',11],['调皮',12],['呲牙',13],['惊讶',14],['难过',15],
+  ['酷',16],['冷汗',17],['抓狂',18],['吐',19],['偷笑',20],['可爱',21],['白眼',22],['傲慢',23],
+  ['饥饿',24],['困',25],['惊恐',26],['流汗',27],['憨笑',28],['大兵',29],['奋斗',30],['咒骂',31],
+  ['疑问',32],['嘘',33],['晕',34],['折磨',35],['衰',36],['骷髅',37],['敲打',38],['再见',39],
+  ['擦汗',40],['抠鼻',41],['鼓掌',42],['糗大了',43],['坏笑',44],['左哼哼',45],['右哼哼',46],['哈欠',47],
+  ['鄙视',48],['委屈',49],['快哭了',50],['阴险',51],['亲亲',52],['吓',53],['可怜',54],['菜刀',55],
+  ['西瓜',56],['啤酒',57],['篮球',58],['乒乓',59],['咖啡',60],['饭',61],['猪头',62],['玫瑰',63],
+  ['凋谢',64],['示爱',65],['爱心',66],['心碎',67],['蛋糕',68],['闪电',69],['炸弹',70],['刀',71],
+  ['足球',72],['瓢虫',73],['便便',74],['月亮',75],['太阳',76],['礼物',77],['拥抱',78],['强',79],
+  ['弱',80],['握手',81],['胜利',82],['抱拳',83],['勾引',84],['拳头',85],['差劲',86],['爱你',87],
+  ['NO',88],['OK',89],['跳跳',92],['发抖',94],['怄火',95],['转圈',96],
+  ['嘿哈',100],['捂脸',101],['奸笑',102],['机智',103],['皱眉',104],['耶',105],
+  ['吃瓜',106],['加油',107],['汗',108],['天啊',109],['社会社会',110],['旺柴',111],
+  ['好的',112],['哇',113],['打脸',114],['翻白眼',115],['666',116],['让我看看',117],
+  ['叹气',118],['苦涩',119],['裂开',120]
+];
+
+const emojiGrid = document.getElementById('emoji-grid');
+const emojiSearch = document.getElementById('emoji-search');
+
+function renderEmojis(filter = '') {
+  emojiGrid.innerHTML = '';
+  EMOJIS.filter(([name]) => !filter || name.includes(filter)).forEach(([name, id]) => {
+    const item = document.createElement('div');
+    item.className = 'emoji-item';
+    item.textContent = '[' + name + ']';
+    item.title = name + ' (ID: ' + id + ')';
+    item.addEventListener('click', () => {
+      navigator.clipboard.writeText('[' + name + ']').then(() => {
+        const msg = document.getElementById('emoji-copy-msg');
+        msg.textContent = '已复制 [' + name + ']';
+        msg.style.display = 'block';
+        setTimeout(() => msg.style.display = 'none', 2000);
+      });
+    });
+    emojiGrid.appendChild(item);
+  });
+}
+renderEmojis();
+emojiSearch.addEventListener('input', () => renderEmojis(emojiSearch.value));
+
+// API helpers
+async function api(path, method = 'GET', data = null) {
+  try {
+    const opts = { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } };
+    if (data) opts.body = JSON.stringify(data);
+    const resp = await fetch('/admin/api/bot/' + path, opts);
+    return await resp.json();
+  } catch (e) {
+    console.error('API error:', e);
+    return null;
+  }
+}
+
+const _msgTimers = {};
+function showMsg(elId, text, type = 'info', holdMs = 5000) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.className = 'msg ' + type;
+  el.textContent = text;
+  el.style.display = 'block';
+  if (_msgTimers[elId]) clearTimeout(_msgTimers[elId]);
+  // holdMs<=0 表示常驻，直到下一次调用覆盖（用于“等待生效/已生效”这类需要确认的提示）
+  if (holdMs > 0) {
+    _msgTimers[elId] = setTimeout(() => { el.style.display = 'none'; }, holdMs);
+  }
+}
+
+// ===== Persona mode switch =====
+let currentPersonaMode = "whale";
+
+function setModeButtons(mode) {
+  currentPersonaMode = mode;
+  const w = document.getElementById("mode-whale");
+  const g = document.getElementById("mode-generic");
+  if (w && g) {
+    w.className = "btn" + (mode === "whale" ? " primary" : "");
+    g.className = "btn" + (mode === "generic" ? " primary" : "");
+  }
+  const note = document.getElementById("persona-mode-note");
+  if (note) note.textContent = mode === "whale"
+    ? "当前：示例人格（内置演示用）"
+    : "当前：通用助手（使用下方自定义系统提示词）";
+}
+
+async function loadPersonaMode() {
+  const res = await api("persona-mode");
+  if (res && res.mode) setModeButtons(res.mode);
+}
+
+async function switchPersonaMode(mode) {
+  const res = await api("persona-mode", "POST", { mode: mode });
+  if (res && res.ok) { setModeButtons(mode); showMsg("personality-msg", "✅ 已切换人设为 " + mode + "，正在回读确认...", "info", 0); try { const cfg = await api("effective-config"); if (cfg && !cfg.error) { renderAppliedStatus(cfg); showMsg("personality-msg", "✅ 切换成功并已生效：" + (cfg.persona && cfg.persona.mode === mode ? "机器人已使用该人设" : "等待下一次读取"), "success", 6000); } } catch(e){} }
+  else showMsg("personality-msg", "❌ " + ((res && res.error) || "切换失败"), "error");
+}
+
+document.getElementById("mode-whale").addEventListener("click", () => switchPersonaMode("whale"));
+document.getElementById("mode-generic").addEventListener("click", () => switchPersonaMode("generic"));
+loadPersonaMode();
+
+// Save personality
+document.getElementById('save-personality').addEventListener('click', async () => {
+  const persona = document.getElementById('persona-text').value;
+  const name = document.getElementById('persona-name').value;
+  const triggers = document.getElementById('trigger-words').value;
+  showMsg('personality-msg', '正在保存...', 'info');
+  // persist custom persona (used when mode=generic) + display name
+  const r1 = await api('persona-mode', 'POST', { mode: currentPersonaMode, custom_persona: persona, display_name: name });
+  // also store legacy personality blob for reference/preview
+  const r2 = await api('personality', 'POST', { persona: persona, name: name, trigger_words: triggers });
+  if ((r1 && r1.ok) || (r2 && r2.ok)) {
+    let msg = '✅ 已保存';
+    if (currentPersonaMode === 'whale') msg += '（当前是清漪模式，自定义提示词将在切到“通用助手”后生效）';
+    else msg += '，下一条消息即按此设定回复';
+    showMsg(msg.includes('通用') ? 'personality-msg' : 'personality-msg', msg + '，正在回读确认...', 'info', 0);
+    try { const cfg = await api('effective-config'); if (cfg && !cfg.error) { renderAppliedStatus(cfg); } } catch(e){}
+  } else {
+    showMsg('personality-msg', '❌ 保存失败：' + (((r1&&r1.error)||(r2&&r2.error))||'接口不可用'), 'error');
+  }
+});
+
+// ===== Verify settings actually applied by the bot =====
+function renderAppliedStatus(cfg) {
+  const box = document.getElementById("applied-status");
+  if (!box) return;
+  const p = cfg.persona || {};
+  const s = cfg.settings || {};
+  const modeLabel = p.mode === "whale" ? "🐋 示例人格" : (p.mode === "generic" ? "🤖 通用助手" : (p.mode || "?"));
+  let html = "";
+  html += "<div><b>当前生效人设：</b>" + modeLabel + ' <span style="color:var(--accent)">(' + (p.source || "") + ')</span></div>';
+  if (p.has_custom) html += "<div>自定义提示词：已写入（通用模式生效）</div>";
+  if (s.available) {
+    const okDot = s.fresh ? '<span style="color:#4ade80">●在线</span>' : '<span style="color:#f87171">●超时</span>';
+    html += "<div><b>机器人运行参数</b> " + okDot + ' <span style="color:var(--text-dim)">（最近上报 ' + s.age_sec + '秒前）</span></div>';
+    html += "<div>回复长度：" + (s.reply_chars || "?") + "字 · 分条：" + (s.bubbles || "?") + "条 · Token上限：" + (s.reply_tokens || "?") + "</div>";
+    if (s.style_note) html += "<div>语气偏好：" + String(s.style_note).slice(0,40) + "</div>";
+  } else {
+    html += '<div style="color:#f87171">⚠ 还没读到机器人上报的运行参数（等待首次快照，约20秒内出现）</div>';
+  }
+  box.innerHTML = html;
+  box.style.display = "block";
+}
+
+async function verifyApplied() {
+  showMsg("personality-msg", "正在读取机器人实际生效的配置...", "info", 0);
+  try {
+    const cfg = await api("effective-config");
+    if (!cfg || cfg.error) {
+      showMsg("personality-msg", "❌ 读取失败：" + ((cfg && cfg.error) || "接口不可用"), "error", 6000);
+      return;
+    }
+    renderAppliedStatus(cfg);
+    showMsg("personality-msg", "✅ 已回读机器人当前配置，见下方「生效状态」", "success", 6000);
+  } catch (e) {
+    showMsg("personality-msg", "❌ 异常：" + e.message, "error", 6000);
+  }
+}
+document.getElementById("verify-applied").addEventListener("click", verifyApplied);
+
+
+// ===== Reply parameters: presets + save-to-control + verify =====
+function applyPreset(chars, bubbles) {
+  document.getElementById("reply-length").value = chars;
+  document.getElementById("reply-length-val").textContent = chars + "字";
+  document.getElementById("reply-bubbles").value = bubbles;
+  document.getElementById("reply-bubbles-val").textContent = bubbles + "条";
+}
+document.getElementById("preset-casual").addEventListener("click", () => applyPreset(20, 1));
+document.getElementById("preset-normal").addEventListener("click", () => applyPreset(40, 2));
+document.getElementById("preset-rich").addEventListener("click", () => applyPreset(120, 3));
+
+async function loadSettingsIntoPanel() {
+  try {
+    const cfg = await api("effective-config");
+    if (!cfg || !cfg.settings || !cfg.settings.available) return;
+    const s = cfg.settings;
+    if (s.reply_chars) { document.getElementById("reply-length").value = s.reply_chars; document.getElementById("reply-length-val").textContent = s.reply_chars + "字"; }
+    if (s.bubbles) { document.getElementById("reply-bubbles").value = s.bubbles; document.getElementById("reply-bubbles-val").textContent = s.bubbles + "条"; }
+    if (s.delay_ms) { document.getElementById("reply-delay").value = s.delay_ms; document.getElementById("reply-delay-val").textContent = s.delay_ms + "ms"; }
+  } catch (e) {}
+}
+
+async function verifySettings() {
+  showMsg("settings-msg", "正在回读机器人运行参数...", "info", 0);
+  try {
+    const cfg = await api("effective-config");
+    const box = document.getElementById("settings-applied");
+    const s = (cfg && cfg.settings) || {};
+    if (s.available) {
+      const dot = s.fresh ? '<span style="color:#4ade80">●在线</span>' : '<span style="color:#f87171">●超时</span>';
+      box.innerHTML = "<div><b>机器人当前实际参数</b> " + dot + '（' + s.age_sec + '秒前上报）</div>'
+        + "<div>回复长度：" + (s.reply_chars||"?") + "字 · 分条：" + (s.bubbles||"?") + "条 · Token上限：" + (s.reply_tokens||"?") + "</div>";
+      box.style.display = "block";
+      showMsg("settings-msg", "✅ 已回读，见下方", "success", 6000);
+    } else {
+      box.innerHTML = '<div style="color:#f87171">⚠ 未读到机器人快照，等约20秒再点验证</div>';
+      box.style.display = "block";
+      showMsg("settings-msg", "等待机器人首次上报...", "info", 5000);
+    }
+  } catch (e) {
+    showMsg("settings-msg", "❌ " + e.message, "error", 6000);
+  }
+}
+document.getElementById("verify-settings").addEventListener("click", verifySettings);
+
+// Save reply params through the control-plane local bridge (needs current revision)
+document.getElementById("save-settings").addEventListener("click", async () => {
+  showMsg("settings-msg", "保存中...", "info", 0);
+  try {
+    // fetch fresh state to get settings_revision
+    const st = await api("control");
+    if (!st || !st.state) { showMsg("settings-msg", "❌ 读不到机器人状态，请确认已连接", "error", 6000); return; }
+    const rev = st.state.settings_revision;
+    const values = {
+      reply_chars: Number(document.getElementById("reply-length").value),
+      reply_tokens: Math.min(400, Number(document.getElementById("reply-length").value) * 2),
+      bubbles: Number(document.getElementById("reply-bubbles").value),
+      delay_ms: Number(document.getElementById("reply-delay").value),
+    };
+    const ecfg = await api("effective-config");
+    const csrfTok = (ecfg && ecfg.control_csrf) || "";
+    if (!csrfTok) { showMsg("settings-msg", "❌ 未取得安全令牌，请重新登录", "error", 6000); return; }
+    const r = await fetch("/admin/api/bot/control", { method:"POST", credentials:"same-origin",
+      headers:{ "Content-Type":"application/json", "X-CSRF-Token": csrfTok },
+      body: JSON.stringify({ action:"settings", revision: rev, values }) });
+    const j = await r.json();
+    if (r.ok && j.ok) {
+      showMsg("settings-msg", "✅ 已提交，等待机器人应用（约20秒），可点“验证是否生效”确认", "success", 8000);
+      setTimeout(verifySettings, 22000);
+    } else {
+      showMsg("settings-msg", "❌ " + ((j && j.error) || ("HTTP "+r.status)), "error", 8000);
+    }
+  } catch (e) {
+    showMsg("settings-msg", "❌ " + e.message, "error", 6000);
+  }
+});
+
+loadSettingsIntoPanel();
+
+
+// ===== 运行监控面板（真实数据） =====
+async function loadMonitor() {
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  const row = (k, v, color) => "<div>" + k + "：" + (color ? '<span style="color:' + color + '">' + v + "</span>" : v) + "</div>";
+  try {
+    // 1) 连接状态（用有效的 control 或 effective-config）
+    let ctrl = null, cfg = null;
+    try { ctrl = await api("control"); } catch (e) {}
+    try { cfg = await api("effective-config"); } catch (e) {}
+    const s = (cfg && cfg.settings) || {};
+    const live = !!(ctrl && ctrl.fresh) || !!(s.available && s.fresh);
+    let h = "";
+    h += row("机器人", live ? "● 在线" : "● 离线", live ? "#4ade80" : "#f87171");
+    if (s.available && s.age_sec !== undefined) h += row("最近上报", s.age_sec + " 秒前");
+    h += row("OneBot WS", "127.0.0.1:3001");
+    if (cfg && cfg.persona) h += row("当前人设", cfg.persona.mode === "whale" ? "🐋 清漪" : "🤖 通用");
+    set("monitor-connection", h);
+
+    // 2) 消息统计（来自 fun/play 真实计数）
+    let fun = null;
+    try { fun = await api("play"); } catch (e) {}
+    const st = (fun && fun.state) || {};
+    const today = st.today || {};
+    let m = "";
+    if (today.messages !== undefined) {
+      m += row("今日消息", today.messages + " 条");
+      m += row("其中私聊", (today.private_messages || 0) + " 条");
+      m += row("图片", (today.images || 0) + " 张");
+      m += row("模型调用", (today.model_calls || 0) + " 次");
+      const errs = today.model_errors || 0;
+      m += row("模型错误", errs + " 次", errs > 0 ? "#f87171" : "#4ade80");
+      m += row("已发送", (today.sent_replies || 0) + " 条");
+    } else {
+      m += "<div>暂无统计（机器人首次上报后出现）</div>";
+    }
+    set("monitor-messages", m);
+
+    // 3) 系统资源（/api/status）
+    try {
+      const sys = await (await fetch("/api/status", {credentials: "same-origin"})).json();
+      let r2 = "";
+      r2 += row("CPU", sys.cpu + " %");
+      r2 += row("内存", sys.memory + " %");
+      r2 += row("磁盘", sys.disk + " %");
+      r2 += row("负载", sys.load);
+      r2 += row("运行时长", Math.floor((sys.uptime || 0) / 3600) + " 小时");
+      set("monitor-system", r2);
+    } catch (e) { set("monitor-system", "<div>系统信息不可用</div>"); }
+
+    // 4) 最近事件（操作记录）
+    const ops = (ctrl && ctrl.operations) || [];
+    if (ops.length) {
+      let ev = '<table style="width:100%;font-size:12px"><tr style="color:var(--text-dim)"><th align="left">时间</th><th align="left">ID</th><th align="left">状态</th><th align="left">结果</th></tr>';
+      for (const op of ops.slice(0, 20)) {
+        const t = new Date((op.created || 0) * 1000).toLocaleString("zh-CN");
+        ev += "<tr><td>" + t + "</td><td>" + String(op.id || "").slice(0, 8) + "</td><td>" + (op.status || "") + "</td><td>" + (op.result || "") + "</td></tr>";
+      }
+      ev += "</table>";
+      set("monitor-events", ev);
+    } else {
+      set("monitor-events", '<div style="color:var(--text-dim);font-size:12px">暂无操作记录</div>');
+    }
+  } catch (e) {
+    set("monitor-connection", "<div>加载失败：" + e.message + "</div>");
+  }
+}
+// 切到监控页时刷新 + 定时刷新
+document.querySelectorAll('nav.tabs button').forEach(b => {
+  b.addEventListener("click", () => { if (b.dataset.tab === "monitor") loadMonitor(); });
+});
+setInterval(() => { const p = document.getElementById("panel-monitor"); if (p && p.classList.contains("active")) loadMonitor(); }, 8000);
+
+// ===== QQ 收藏表情包（斗图库） =====
+async function loadQqFaces() {
+  const grid = document.getElementById("qq-faces-grid");
+  const msg = document.getElementById("qq-faces-msg");
+  if (!grid) return;
+  try {
+    const r = await api("qq-faces");
+    const urls = (r && r.urls) || [];
+    grid.innerHTML = "";
+    if (!urls.length) {
+      msg.className = "msg info";
+      msg.textContent = "还没读到收藏表情。机器人连接后会自动同步（约20秒）；也可在 QQ 里多收藏几张表情包。";
+      msg.style.display = "block";
+      return;
+    }
+    msg.style.display = "none";
+    urls.forEach((u, i) => {
+      const box = document.createElement("div");
+      box.style.cssText = "border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#0b1421;cursor:pointer";
+      box.title = "点击预览";
+      const img = document.createElement("img");
+      img.src = u; img.loading = "lazy";
+      img.style.cssText = "width:100%;height:90px;object-fit:contain;display:block";
+      box.appendChild(img);
+      box.onclick = () => window.open(u, "_blank");
+      grid.appendChild(box);
+    });
+  } catch (e) {
+    if (msg) { msg.className = "msg error"; msg.textContent = "读取失败：" + e.message; msg.style.display = "block"; }
+  }
+}
+const rf = document.getElementById("refresh-faces");
+if (rf) rf.addEventListener("click", loadQqFaces);
+document.querySelectorAll('nav.tabs button').forEach(b => {
+  b.addEventListener("click", () => { if (b.dataset.tab === "emojis") loadQqFaces(); });
+});
+
+// ===== 对话记忆查看（每个人/每个群）=====
+function fmtTime(ts) {
+  if (!ts) return "-";
+  try { return new Date(ts * 1000).toLocaleString("zh-CN"); } catch (e) { return "-"; }
+}
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+  });
+}
+async function loadConversations() {
+  const list = document.getElementById("conv-list");
+  const cnt = document.getElementById("conv-count");
+  if (!list) return;
+  list.innerHTML = '<div style="padding:12px;color:var(--text-dim);font-size:13px">加载中…</div>';
+  try {
+    const r = await api("memories");
+    const sessions = (r && r.sessions) || [];
+    if (cnt) cnt.textContent = "共 " + sessions.length + " 个会话";
+    if (!sessions.length) {
+      list.innerHTML = '<div style="padding:12px;color:var(--text-dim);font-size:13px">还没有对话记忆。等机器人聊过天后就会出现。</div>';
+      return;
+    }
+    list.innerHTML = "";
+    sessions.forEach(function (s) {
+      const kindIcon = s.kind === "private" ? "👤 私聊" : (s.kind === "group" ? "👥 群聊" : "❓");
+      const who = s.kind === "private"
+        ? ("QQ " + (s.user_id || "?"))
+        : ((s.group_id ? "群 " + s.group_id : "") + (s.user_id ? " / " + s.user_id : ""));
+      const div = document.createElement("div");
+      div.className = "memory-item";
+      div.style.cursor = "pointer";
+      var sumHtml = s.summary
+        ? '<div style="margin-top:6px;padding:6px 8px;background:#16202e;border-radius:6px;font-size:12px;color:#93c5fd">🧠 长期记忆：' + escapeHtml(String(s.summary).slice(0, 120)) + (String(s.summary).length > 120 ? "…" : "") + '</div>'
+        : '<div style="margin-top:6px;font-size:12px;color:#6b7280">尚无长期记忆（多聊几轮会自动生成）</div>';
+      div.innerHTML = '<div class="memory-meta">' + kindIcon + " · " + who + " · " + s.turns + " 条 · " + fmtTime(s.updated) + "</div>"
+        + '<div class="memory-text">' + escapeHtml(s.preview || "(空)") + "</div>" + sumHtml;
+      div.onclick = function () { showConversation(s.key, kindIcon + " " + who); };
+      list.appendChild(div);
+    });
+  } catch (e) {
+    list.innerHTML = '<div style="padding:12px;color:#f87171;font-size:13px">读取失败：' + escapeHtml(e.message) + "</div>";
+  }
+}
+async function showConversation(key, title) {
+  const box = document.getElementById("conv-detail");
+  const turnsBox = document.getElementById("conv-turns");
+  const titleEl = document.getElementById("conv-title");
+  if (!box || !turnsBox) return;
+  box.style.display = "block";
+  if (titleEl) titleEl.textContent = title;
+  turnsBox.innerHTML = '<div style="color:var(--text-dim);font-size:13px">加载中…</div>';
+  try {
+    const rec = await api("memories/" + encodeURIComponent(key));
+    const turns = (rec && rec.turns) || [];
+    if (!turns.length) { turnsBox.innerHTML = '<div style="color:var(--text-dim);font-size:13px">无记录</div>'; return; }
+    turnsBox.innerHTML = "";
+    turns.forEach(function (t) {
+      const isUser = t.role === "user";
+      const d = document.createElement("div");
+      d.style.cssText = "margin-bottom:10px;padding:8px 10px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;"
+        + (isUser ? "background:#132234;border-left:3px solid #38bdf8" : "background:#1a1626;border-left:3px solid #a78bfa");
+      d.innerHTML = '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">'
+        + (isUser ? "用户" : "清漪") + "</div>" + escapeHtml(t.content);
+      turnsBox.appendChild(d);
+    });
+  } catch (e) {
+    turnsBox.innerHTML = '<div style="color:#f87171;font-size:13px">读取失败：' + escapeHtml(e.message) + "</div>";
+  }
+}
+var _rcBtn = document.getElementById("refresh-conv");
+if (_rcBtn) _rcBtn.addEventListener("click", loadConversations);
+document.querySelectorAll('nav.tabs button').forEach(function (b) {
+  b.addEventListener("click", function () { if (b.dataset.tab === "memory") loadConversations(); });
+});
+
+
+// ===== 群记忆管理（补全：下拉/查看/保存/清空/重建）=====
+var _grpCache = {};
+async function loadGroupList() {
+  const sel = document.getElementById("memory-group-select");
+  if (!sel) return;
+  try {
+    const st = await api("control");
+    const groups = (st && st.state && st.state.groups) || [];
+    const groups2 = (st && st.groups) || groups;
+    const list = groups2.length ? groups2 : groups;
+    sel.innerHTML = '<option value="">选择群组...</option>';
+    _grpCache = {};
+    list.forEach(function (g) {
+      const gid = g.id || g.group_id;
+      if (!gid) return;
+      _grpCache[gid] = g;
+      const opt = document.createElement("option");
+      opt.value = gid;
+      opt.textContent = "群 " + gid + (g.memory ? " · 有记忆" : " · 暂无记忆");
+      sel.appendChild(opt);
+    });
+    // 只要读到群就自动选中第一个并显示，不然面板看起来是空的
+    if (list.length >= 1) { sel.selectedIndex = 1; showGroupMemory(); }
+  } catch (e) {
+    sel.innerHTML = '<option value="">读取失败: ' + escapeHtml(e.message) + '</option>';
+  }
+}
+function showGroupMemory() {
+  const sel = document.getElementById("memory-group-select");
+  const box = document.getElementById("memory-content");
+  const editor = document.getElementById("memory-editor");
+  const gid = sel && sel.value;
+  if (!gid) { if (box) box.style.display = "none"; return; }
+  const g = _grpCache[gid] || {};
+  if (box) box.style.display = "block";
+  if (editor) editor.value = g.memory || "";
+  const stat = document.getElementById("memory-stat");
+  if (stat) {
+    const cache = g.cache || [];
+    stat.innerHTML = "<div>群号：" + gid + "</div>"
+      + "<div>记忆长度：" + ((g.memory || "").length) + " 字</div>"
+      + "<div>缓存消息：" + cache.length + " 条</div>"
+      + (g.memory_updated ? "<div>更新于：" + fmtTime(g.memory_updated) + "</div>" : "");
+  }
+}
+async function saveGroupMemory() {
+  const sel = document.getElementById("memory-group-select");
+  const editor = document.getElementById("memory-editor");
+  const gid = sel && sel.value;
+  if (!gid) return;
+  const g = _grpCache[gid] || {};
+  try {
+    const csrf = (await api("effective-config")).control_csrf || "";
+    const r = await fetch("/admin/api/bot/control", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ action: "memory_set", revision: g.memory_revision, group: gid, text: editor.value })
+    });
+    const j = await r.json();
+    showMsg("memory-msg", r.ok && j.ok ? "✅ 已保存" : ("❌ " + ((j && j.error) || ("HTTP " + r.status))), r.ok && j.ok ? "success" : "error", 6000);
+    if (r.ok && j.ok) setTimeout(loadGroupList, 2000);
+  } catch (e) {
+    showMsg("memory-msg", "❌ " + e.message, "error", 6000);
+  }
+}
+async function clearGroupMemory() {
+  const sel = document.getElementById("memory-group-select");
+  const gid = sel && sel.value;
+  if (!gid || !confirm("确定清空这个群的记忆和缓存？")) return;
+  const g = _grpCache[gid] || {};
+  try {
+    const csrf = (await api("effective-config")).control_csrf || "";
+    const r = await fetch("/admin/api/bot/control", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ action: "cache_clear", revision: g.cache_revision || revisionOf(g.cache), group: gid })
+    });
+    const j = await r.json();
+    showMsg("memory-msg", r.ok && j.ok ? "✅ 已清空" : ("❌ " + ((j && j.error) || ("HTTP " + r.status))), r.ok && j.ok ? "success" : "error", 6000);
+    if (r.ok && j.ok) setTimeout(loadGroupList, 2000);
+  } catch (e) {
+    showMsg("memory-msg", "❌ " + e.message, "error", 6000);
+  }
+}
+function revisionOf(x) { return ""; }
+async function rebuildGroupMemory() {
+  const sel = document.getElementById("memory-group-select");
+  const gid = sel && sel.value;
+  if (!gid) return;
+  showMsg("memory-msg", "已提交重建请求，机器人会在 20 秒内处理…", "info", 0);
+  try {
+    const r = await fetch("/admin/api/bot/memories/rebuild", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: gid, kind: "group" })
+    });
+    const j = await r.json();
+    showMsg("memory-msg", r.ok && j.ok ? "✅ 已提交，稍后点刷新看结果" : ("❌ " + ((j && j.error) || r.status)), r.ok && j.ok ? "success" : "error", 8000);
+  } catch (e) {
+    showMsg("memory-msg", "❌ " + e.message, "error", 6000);
+  }
+}
+async function rebuildConversationMemory(key, kind) {
+  try {
+    const r = await fetch("/admin/api/bot/memories/rebuild", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: key, kind: kind })
+    });
+    const j = await r.json();
+    showMsg("conv-detail", "", "info", 1);
+    alert(r.ok && j.ok ? "已提交，机器人 20 秒内处理" : ("失败：" + ((j && j.error) || r.status)));
+  } catch (e) { alert("失败：" + e.message); }
+}
+(function () {
+  var sel = document.getElementById("memory-group-select");
+  if (sel) sel.addEventListener("change", showGroupMemory);
+  var rb = document.getElementById("refresh-memory");
+  if (rb) rb.addEventListener("click", loadGroupList);
+  var sv = document.getElementById("save-memory");
+  if (sv) sv.addEventListener("click", saveGroupMemory);
+  var cl = document.getElementById("clear-memory");
+  if (cl) cl.addEventListener("click", clearGroupMemory);
+  var rb2 = document.getElementById("rebuild-memory");
+  if (rb2) rb2.addEventListener("click", rebuildGroupMemory);
+  document.querySelectorAll('nav.tabs button').forEach(function (b) {
+    b.addEventListener("click", function () { if (b.dataset.tab === "memory") loadGroupList(); });
+  });
+})();
+
+
+// ===== 刷新 = 立即重建群记忆并写入 =====
+async function refreshGroupMemoryHard() {
+  const sel = document.getElementById("memory-group-select");
+  const msgEl = document.getElementById("memory-msg");
+  const btn = document.getElementById("refresh-memory");
+  const gid = (sel && sel.value) || "";
+  const oldLen = gid && _grpCache[gid] ? String(_grpCache[gid].memory || "").length : 0;
+
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 重建中…"; }
+  showMsg("memory-msg", "正在让机器人重新整理群记忆，请稍候（最多 60 秒）…", "info", 0);
+
+  try {
+    // 没选群就重建全部
+    const key = gid || (Object.keys(_grpCache)[0] || "");
+    const kind = "group";
+    const r = await fetch("/admin/api/bot/memories/rebuild", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: key, kind: kind, force: true })
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) {
+      showMsg("memory-msg", "❌ 提交失败：" + ((j && j.error) || r.status), "error", 8000);
+      return;
+    }
+
+    // 轮询等待记忆真的变化
+    for (let i = 0; i < 20; i++) {
+      await new Promise(function (res) { setTimeout(res, 3000); });
+      await loadGroupList();
+      const g = _grpCache[key] || {};
+      const newLen = String(g.memory || "").length;
+      if (newLen > 0 && newLen !== oldLen) {
+        if (sel && sel.value) showGroupMemory();
+        showMsg("memory-msg", "✅ 群记忆已重建并写入（" + newLen + " 字）", "success", 8000);
+        return;
+      }
+      if (i === 6) showMsg("memory-msg", "仍在处理中…（第 " + ((i + 1) * 3) + " 秒）", "info", 0);
+    }
+    const g0 = _grpCache[key] || {};
+    const cacheN = (g0.cache || []).length;
+    if (cacheN === 0) {
+      showMsg("memory-msg", "ℹ 这个群暂时没有新消息可整理（缓存 0 条）。等群里聊几句再点刷新。", "info", 9000);
+    } else {
+      showMsg("memory-msg", "⚠ 等待超时，记忆未变化。可能模型未产出内容，可再点一次。", "error", 9000);
+    }
+  } catch (e) {
+    showMsg("memory-msg", "❌ " + e.message, "error", 8000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 刷新"; }
+  }
+}
+var _rmBtn = document.getElementById("refresh-memory");
+if (_rmBtn) {
+  _rmBtn.removeEventListener("click", loadGroupList);
+  _rmBtn.addEventListener("click", refreshGroupMemoryHard);
+}
+
+
+// Test model
+document.getElementById('test-model').addEventListener('click', async () => {
+  const url = document.getElementById('model-url').value;
+  const key = document.getElementById('model-key').value;
+  const model = document.getElementById('model-name').value;
+  if (!url || !key || !model) {
+    showMsg('model-msg', '请填写完整的模型信息', 'error');
+    return;
+  }
+  showMsg('model-msg', '正在测试连接...', 'info');
+  try {
+    const resp = await fetch(url.replace(/\/$/, '') + '/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 5 })
+    });
+    if (resp.ok) {
+      showMsg('model-msg', '✅ 连接成功！模型可用。', 'success');
+    } else {
+      const err = await resp.text();
+      showMsg('model-msg', '❌ 连接失败: ' + resp.status + ' ' + err.slice(0, 200), 'error');
+    }
+  } catch (e) {
+    showMsg('model-msg', '❌ 网络错误: ' + e.message, 'error');
+  }
+});
+
+// ===== Style / Fingerprint panel =====
+let styleStatus = null;
+
+async function loadStyleStatus() {
+  const res = await api("style");
+  if (!res) { document.getElementById("style-source").textContent = "无法读取文风状态"; return; }
+  styleStatus = res;
+  const src = document.getElementById("style-source");
+  const buckets = Object.entries(res.sample_buckets || {}).map(([k,v]) => k + ":" + v).join(" · ") || "无";
+  src.innerHTML =     "<div>语料目录：<span style=\"color:var(--text)\">" + (res.corpus_root || "?") + "</span> " +
+      (res.corpus_exists ? "<span style=\"color:#4ade80\">(可访问)</span>" : "<span style=\"color:#f87171\">(不可访问！请检查路径)</span>") + "</div>" +
+    "<div>亲笔样本池：<span style=\"color:var(--accent)\">" + (res.sample_total || 0) + "</span> 段（" + buckets + "）</div>" +
+    "<div>注入开关：<span>" + (res.enabled ? "已启用" : "已关闭") + "</span></div>";
+
+  // book selector
+  const sel = document.getElementById("style-book");
+  sel.innerHTML = "";
+  (res.books || []).forEach(b => {
+    const o = document.createElement("option");
+    o.value = b.key; o.textContent = b.key + " — " + b.name;
+    if (b.key === res.default_book) o.selected = true;
+    sel.appendChild(o);
+  });
+  renderBookProfile();
+
+  document.getElementById("style-enabled").checked = !!res.enabled;
+  document.getElementById("style-threshold").value = res.long_threshold ?? 40;
+  document.getElementById("style-threshold-val").textContent = (res.long_threshold ?? 40) + "字";
+  document.getElementById("style-samples").value = res.samples_per_call ?? 2;
+  document.getElementById("style-samples-val").textContent = (res.samples_per_call ?? 2) + "段";
+}
+
+function renderBookProfile() {
+  const box = document.getElementById("book-profile");
+  if (!styleStatus) { box.textContent = ""; return; }
+  const key = document.getElementById("style-book").value;
+  const bk = (styleStatus.books || []).find(b => b.key === key);
+  box.innerHTML = "<div style=\"color:var(--accent);margin-bottom:6px\">指纹维度：" + ((bk && bk.attrs) || []).join(" / ") + "</div>" +
+    "<div>切换书目后，段落粒度、省略号字形、破折号配额、对话标签式样、章末钩子类型都会按该书实测值投放。</div>";
+}
+document.getElementById("style-book").addEventListener("change", renderBookProfile);
+
+document.getElementById("style-threshold").addEventListener("input", e => {
+  document.getElementById("style-threshold-val").textContent = e.target.value + "字";
+});
+document.getElementById("style-samples").addEventListener("input", e => {
+  document.getElementById("style-samples-val").textContent = e.target.value + "段";
+});
+
+document.getElementById("save-book").addEventListener("click", async () => {
+  const book = document.getElementById("style-book").value;
+  const res = await api("style", "POST", { default_book: book });
+  if (res && res.ok) { showMsg("style-msg", "✅ 已切换到 " + book, "success"); await loadStyleStatus(); }
+  else showMsg("style-msg", "❌ " + ((res && res.error) || "切换失败"), "error");
+});
+
+document.getElementById("save-style-policy").addEventListener("click", async () => {
+  const payload = {
+    enabled: document.getElementById("style-enabled").checked,
+    long_threshold: Number(document.getElementById("style-threshold").value),
+    samples_per_call: Number(document.getElementById("style-samples").value),
+  };
+  const res = await api("style", "POST", payload);
+  if (res && res.ok) { showMsg("style-msg", "✅ 策略已保存并即时生效", "success"); await loadStyleStatus(); }
+  else showMsg("style-msg", "❌ " + ((res && res.error) || "保存失败"), "error");
+});
+
+document.getElementById("style-reload").addEventListener("click", async () => {
+  showMsg("style-msg", "正在重新扫描语料目录...", "info");
+  const res = await api("style/reload", "POST", {});
+  if (res && res.ok) { showMsg("style-msg", "✅ 样本池已刷新：" + res.sample_total + " 段", "success"); await loadStyleStatus(); }
+  else showMsg("style-msg", "❌ " + ((res && res.error) || "刷新失败"), "error");
+});
+
+async function previewStyle(mode) {
+  const book = document.getElementById("style-book").value;
+  const res = await api("style/preview", "POST", { mode: mode, book: book });
+  const ta = document.getElementById("style-preview");
+  if (res && res.block !== undefined) {
+    ta.value = res.block || "(注入已关闭，模型不会收到文风块)";
+    showMsg("style-msg", "预览长度 " + (res.length || 0) + " 字符 · 模式 " + mode, "info");
+  } else {
+    ta.value = ""; showMsg("style-msg", "❌ 预览失败", "error");
+  }
+}
+document.getElementById("preview-chat").addEventListener("click", () => previewStyle("chat"));
+document.getElementById("preview-long").addEventListener("click", () => previewStyle("long"));
+
+loadStyleStatus();
+
+
+// Save model config via API
+document.getElementById('save-model').addEventListener('click', async () => {
+  const payload = {
+    role: document.getElementById('model-role').value,
+    base_url: document.getElementById('model-url').value.trim(),
+    api_key: document.getElementById('model-key').value.trim(),
+    model: document.getElementById('model-name').value.trim() || 'qwen3.8-flash',
+    max_tokens: Number(document.getElementById('model-tokens').value) || 2048,
+    timeout: Number(document.getElementById('model-timeout').value) || 120,
+    reasoning_effort: document.getElementById('model-effort').value, // '' = Default
+  };
+  if (!payload.base_url) { showMsg('model-msg', '请填写 Base URL', 'error'); return; }
+  showMsg('model-msg', '正在保存...', 'info');
+  const res = await api('models-config', 'POST', payload);
+  if (res && res.ok) {
+    showMsg('model-msg', '✅ ' + (res.message || '已保存') + '（思考强度：' + (payload.reasoning_effort || 'Default') + '）', 'success');
+  } else {
+    showMsg('model-msg', '❌ ' + ((res && res.error) || '保存失败'), 'error');
+  }
+});
+
+// Load current models into cards on panel open
+async function loadModelCards() {
+  const container = document.getElementById('model-cards-container');
+  const res = await api('models-config');
+  if (!res || !res.models) { container.innerHTML = '<div class="card"><p style="color:var(--text-dim)">无法读取模型配置</p></div>'; return; }
+  container.innerHTML = '';
+  const roleNames = { text: '文本模型', vision: '视觉模型', summary: '摘要模型' };
+  for (const m of res.models) {
+    const card = document.createElement('div');
+    card.className = 'model-card';
+    const effortLabel = m.reasoning_effort ? m.reasoning_effort : 'Default';
+    card.innerHTML = '<div class="tag">' + (roleNames[m.role] || m.role) + '</div>'
+      + '<h3>' + (m.name || m.model) + '</h3>'
+      + '<div class="model-info">模型: <span>' + m.model + '</span></div>'
+      + '<div class="model-info">端点: <span>' + m.base_url + '</span></div>'
+      + '<div class="model-info">思考强度: <span>' + effortLabel + '</span></div>'
+      + '<div class="model-info">状态: <span style="color:' + (m.configured ? '#4ade80' : '#f87171') + '">' + (m.configured ? '已配置' : '未配置') + '</span></div>';
+    container.appendChild(card);
+  }
+}
+loadModelCards();
+
+// Initial status check
+(async () => {
+  const dot = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  try {
+    const data = await api('control');
+    if (data && data.fresh) {
+      dot.className = 'status-dot online';
+      text.textContent = '机器人在线';
+    } else {
+      dot.className = 'status-dot offline';
+      text.textContent = '机器人离线';
+    }
+  } catch {
+    dot.className = 'status-dot offline';
+    text.textContent = '无法连接';
+  }
+})();
+</script>
+</body>
+</html>

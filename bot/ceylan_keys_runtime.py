@@ -7,7 +7,7 @@ import tempfile
 import time
 from ceylan_keys_common import digest
 
-ROOT = Path(os.getenv('CEYLAN_KEYS_DIR', '/root/openclaw-qq/keys-v5'))
+ROOT = Path(os.getenv('CEYLAN_KEYS_DIR', './data/keys-v5'))
 
 
 def install(ns):
@@ -30,7 +30,7 @@ def install(ns):
     @wraps(original)
     async def vision(*args, **kwargs):
         path = ROOT / 'vision.json'
-        config = json.loads(path.read_text()) if path.exists() else {}
+        config = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
         ns['MIMO_VISION_API_KEY'] = config.get('key', original_key)
         ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
         fd, tmp = tempfile.mkstemp(dir=ROOT)
@@ -42,8 +42,9 @@ def install(ns):
             if os.path.exists(tmp): os.unlink(tmp)
         try:
             return await original(*args, **kwargs)
-        except Exception:
-            # Some providers echo request details in error bodies. Do not let
-            # the original Bridge log a credential-bearing upstream exception.
-            raise RuntimeError('视觉请求失败，请查看模型工作室状态') from None
+        except Exception as exc:
+            # 保留原始错误类型和关键信息，方便定位（不再一律吞成一句话）；
+            # 但截断 body，避免把带凭据的上游响应打进日志。
+            detail = str(exc)[:200].replace('\n', ' ')
+            raise RuntimeError('视觉请求失败: ' + type(exc).__name__ + ': ' + detail) from None
     ns['call_mimo_vision'] = vision

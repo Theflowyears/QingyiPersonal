@@ -1,0 +1,4 @@
+# 只给桌面端（desktop/）用，云端 /opt/qqbot 不装这些，sync_to_cloud.py 也永不上传本文件。
+# 装法：agent-qq-sandbox-bot\venv\Scripts\python.exe -m pip install -r desktop\requirements.txt
+PySide6>=6.8
+psutil>=7.0

@@ -35,7 +35,7 @@ async def napcat():
     if not token:
         try:
             configured=os.getenv('CEYLAN_ONEBOT_CONFIG','').strip()
-            candidates=[configured] if configured else sorted(glob('/root/openclaw-qq/napcat/config/onebot11_*.json'))
+            candidates=[configured] if configured else sorted(glob('./data/napcat/config/onebot11_*.json'))
             cfg=json.loads(Path(candidates[0]).read_text()) if candidates else {}
             for s in cfg.get('network',{}).get('websocketServers',[]):
                 if s.get('enable') and int(s.get('port',0))==(parsed.port or 80):token=s.get('token','');break
@@ -96,7 +96,7 @@ def collect():
             'disk_total':disk.total,'disk_used':disk.used,'uptime':float(Path('/proc/uptime').read_text().split()[0]),
             'rx':sum(int(x[1]) for x in net),'tx':sum(int(x[9]) for x in net)}
     except (OSError,ValueError,KeyError):pass
-    p=Path(os.getenv('CEYLAN_OBSERVER_FILE','/root/openclaw-qq/observer-status.json'))
+    p=Path(os.getenv('CEYLAN_OBSERVER_FILE','./data/observer-status.json'))
     try:
         d['runtime_age']=round(time.time()-p.stat().st_mtime,1)
         if p.stat().st_size<=200000 and 0<=d['runtime_age']<=90 and d['services']['qq-openclaw-bridge'].get('ActiveState')=='active':d['runtime']=json.loads(p.read_text())

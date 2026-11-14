@@ -11,7 +11,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from ceylan_fun_core import validate_command
 from project_config import api_url
 
-ROOT = Path(os.getenv('CEYLAN_FUN_DIR', '/root/openclaw-qq/fun-v6'))
+ROOT = Path(os.getenv('CEYLAN_FUN_DIR', './data/fun-v6'))
 
 
 def atomic(path, value):

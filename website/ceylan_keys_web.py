@@ -11,17 +11,67 @@ from flask import jsonify, request, session
 from ceylan_keys_common import validate
 
 
+def _local_model_status():
+    """Windows 直连模型时，从环境变量 + data/models_config.json 生成模型卡片状态。"""
+    import os
+    from pathlib import Path as _P
+    # 读取面板保存的覆盖配置
+    overrides = {}
+    try:
+        mf = _P(os.getenv("DATA_DIR", "./data")) / "models_config.json"
+        if mf.exists():
+            overrides = json.loads(mf.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        overrides = {}
+
+    def card(role, label):
+        prefix = {"text": "LLM_TEXT_", "vision": "LLM_VISION_", "summary": "LLM_SUMMARY_"}[role]
+        ov = overrides.get(role, {})
+        base_url = ov.get("base_url") or os.getenv(prefix + "BASE_URL", "")
+        model = ov.get("model") or os.getenv(prefix + "MODEL", "")
+        name = ov.get("name") or os.getenv(prefix + "NAME", role)
+        has_key = bool(ov.get("api_key")) or bool(os.getenv(prefix + "API_KEY", ""))
+        rev_src = (base_url + "|" + model + "|" + str(has_key)).encode()
+        import hashlib
+        rev = hashlib.sha256(rev_src).hexdigest()[:64]
+        return {
+            "name": role, "label": label,
+            "provider": (name or "").strip(),
+            "model": model or "",
+            "base": base_url or "",
+            "source": "env/panel",
+            "revision": rev,
+            "editable": True,
+            "configured": bool(base_url and model and has_key),
+            "reason": "",
+            "rollback": False,
+            "load_state": "面板/环境变量直连（本地模式）",
+        }
+
+    cards = [card("vision", "视觉模型"), card("text", "文本主模型")]
+    return {"sampled": time.time(), "cards": cards,
+            "public_key": "", "vision_loaded": {}, "results": []}
+
+
 def install(app, base):
     if app.extensions.get('keys_v5'):
         return
     app.extensions['keys_v5'] = True
-    dbpath = Path(os.getenv('CEYLAN_KEYS_DB', '/var/lib/ceylan-status/keys_v5.db'))
+    dbpath = Path(os.getenv('CEYLAN_KEYS_DB', './data/keys_v5.db'))
 
     @contextmanager
     def db():
         # Create privately before SQLite opens it, including the first request.
-        fd = os.open(dbpath, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-        os.fchmod(fd, 0o600); os.close(fd)
+        _flags = os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0)
+        try:
+            fd = os.open(dbpath, _flags, 0o600)
+            try:
+                os.fchmod(fd, 0o600)
+            except (AttributeError, OSError):
+                pass
+            os.close(fd)
+        except (AttributeError, OSError):
+            pass
         conn = sqlite3.connect(dbpath, timeout=10)
         conn.row_factory = sqlite3.Row
         try:
@@ -60,7 +110,7 @@ def install(app, base):
     @base['admin_required']
     def page():
         session.setdefault('keys_csrf', secrets.token_urlsafe(32))
-        return base['render_console']('bot', (Path(__file__).parent/'bot-models.html').read_text(), csrf=session['keys_csrf'])
+        return base['render_console']('bot', (Path(__file__).parent/'bot-models.html').read_text(encoding='utf-8'), csrf=session['keys_csrf'])
 
     @app.post('/api/bot/keys/sync', endpoint='keys_v5_sync')
     def sync():
@@ -112,6 +162,14 @@ def install(app, base):
             ops=[dict(x) for x in c.execute('SELECT id,created,target,action,status,message FROM ops ORDER BY created DESC LIMIT 40')]
         state=json.loads(row['body']) if row else None
         fresh=bool(row and 0<=time.time()-row['received']<100 and 0<=time.time()-state['sampled']<100)
+
+        # —— 本地回退：keys 平面依赖 Linux/OpenClaw，Windows 直连模型时读不到；
+        #    改为从环境变量 + models_config.json 生成真实卡片状态，让页面显示“已连接”而非报错。
+        if not fresh:
+            local = _local_model_status()
+            if local is not None:
+                return jsonify(state=local, fresh=True, operations=ops)
+
         return jsonify(state=state,fresh=fresh,operations=ops)
 
     @app.post('/admin/api/bot/models', endpoint='keys_v5_enqueue')

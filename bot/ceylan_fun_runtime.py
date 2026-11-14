@@ -12,7 +12,7 @@ import time
 
 from ceylan_fun_core import DEFAULTS, revision, validate_command, validate_settings
 
-ROOT = Path(os.getenv('CEYLAN_FUN_DIR', '/root/openclaw-qq/fun-v6'))
+ROOT = Path(os.getenv('CEYLAN_FUN_DIR', './data/fun-v6'))
 SETTINGS = dict(DEFAULTS)
 LEDGER = {}
 STARTED = time.time()
@@ -211,7 +211,8 @@ def install(ns, runtime):
         add('messages'); add('group_messages', group=gid)
         if images: add('images', images, gid)
         if SETTINGS['easter_enabled']:
-            at_me, text, urls = ns['parse_message'](event)
+            _pm = ns['parse_message'](event)
+            at_me, text, urls = _pm[0], _pm[1], _pm[2]
             hit = next((x for x in SETTINGS['easter_eggs'] if x['trigger'].casefold() == text.strip().casefold()), None)
             if hit:
                 ns['record_group_message'](event, text or hit['trigger'], image_urls=urls)
@@ -234,23 +235,28 @@ def install(ns, runtime):
         fn = ns[name]
         def wrap_model(original):
             @wraps(original)
-            async def call(messages, max_tokens=800, timeout=300):
+            async def call(messages, max_tokens=800, timeout=300, **extra):
                 current = scope(); today = bucket()
-                if current == 'patrol' and SETTINGS['quiet_patrol'] and quiet_active():
+                # fun 最外层先识别用途，不能等 control 消费标记后才知道这是内部调用/交货。
+                internal = bool(extra.get('internal')) or current == 'internal'
+                optional_patrol = current == 'patrol' and not internal and not extra.get('report')
+                if optional_patrol and SETTINGS['quiet_patrol'] and quiet_active():
                     add('patrol_skipped_quiet'); return 'SILENCE'
                 limit = SETTINGS['daily_patrol_model_limit']
-                if current == 'patrol' and limit and today.get('patrol_model_calls', 0) >= limit:
+                if optional_patrol and limit and today.get('patrol_model_calls', 0) >= limit:
                     add('patrol_skipped_limit'); return 'SILENCE'
                 note = MODE_NOTES.get(SETTINGS['mode'], '')
-                copied = [dict(x) for x in messages]
-                if note and current in ('chat', 'patrol'):
+                dedicated = extra.get('reply_profile') in ('intimate', 'boundary', 'long', 'task')
+                copied = messages
+                if note and not internal and not dedicated and current in ('chat', 'patrol'):
+                    copied = [dict(x) for x in messages]
                     if copied and copied[0].get('role') == 'system' and isinstance(copied[0].get('content'), str):
                         copied[0]['content'] += '\n互动模式补充：' + note
                     else: copied.insert(0, {'role': 'system', 'content': '互动模式补充：' + note})
                 add('model_calls')
-                if current == 'patrol': add('patrol_model_calls')
+                if optional_patrol: add('patrol_model_calls')
                 try:
-                    result = await original(copied, max_tokens=max_tokens, timeout=timeout)
+                    result = await original(copied, max_tokens=max_tokens, timeout=timeout, **extra)
                     add('model_ok'); return result
                 except Exception:
                     add('model_errors'); raise
@@ -262,11 +268,15 @@ def install(ns, runtime):
         def wrap_send(original, group_send):
             @wraps(original)
             async def send(*args, **kwargs):
-                bound = inspect.signature(original).bind(*args, **kwargs); bound.apply_defaults()
+                # @wraps 展示的可能还是旧底层签名；profile 由内层 control 消费，
+                # 这里只为统计绑定参数，不能在 control 收到之前就因新标记 TypeError。
+                binding_kwargs = {k: v for k, v in kwargs.items() if k != 'reply_profile'}
+                bound = inspect.signature(original).bind(*args, **binding_kwargs); bound.apply_defaults()
                 text = str(bound.arguments.get('text', ''))
                 gid = str(bound.arguments.get('group_id', '')) if group_send else None
                 result = await original(*args, **kwargs)
-                add('sent_replies', group=gid); add('sent_chars', len(text))
+                if result is True:
+                    add('sent_replies', group=gid); add('sent_chars', len(text))
                 return result
             return send
         ns[name] = wrap_send(fn, name == 'send_group_msg')

@@ -1,0 +1,3698 @@
+{
+  "diagrams": [
+    {
+      "meta": {
+        "title": "01 系统总览：当前边界与两条独立运行面",
+        "diagramType": "architecture",
+        "architectureView": "relations",
+        "viewId": "system",
+        "sourceRef": "c3173b67c83f1bc760ef741d406766f64d567189 + inspected working tree, 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "L1–L3；QQ、Bot、Web、模型、记忆、影子与本地桌宠；模块聚合不代表独立进程。港机状态已于2026-11-10只读核验。",
+        "notes": [
+          "当前表达不受 emotion_shadow 驱动；影子只有观察与审计出口。",
+          "桌宠 P1 纯本地；云端接入 P2 拟议，不画港机远控 MAA 的已实现边。",
+          "2026-11-10运行快照：qqbot active、OneBot已连接；本地桌宠/MAA本轮未实机验收。"
+        ]
+      },
+      "groups": [
+        {
+          "id": "bot-process",
+          "label": "Bot Python / asyncio 进程",
+          "kind": "runtime"
+        },
+        {
+          "id": "web-process",
+          "label": "Web Flask 独立进程",
+          "kind": "runtime"
+        },
+        {
+          "id": "local-desktop",
+          "label": "本地 Windows 桌面进程（不是港机 Bot）",
+          "kind": "runtime"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "qq",
+          "label": "QQ / NapCat",
+          "subtitle": "外部 QQ 登录态；OneBot v11",
+          "kind": "external",
+          "facts": [
+            "accepted 不代表用户已读；本次未探测 NapCat 版本。"
+          ]
+        },
+        {
+          "id": "launcher",
+          "label": "launcher.py",
+          "subtitle": "启动 Bot 与 Web；单实例锁",
+          "kind": "service",
+          "module": "运行控制",
+          "source": {
+            "kind": "source",
+            "file": "launcher.py",
+            "lineStart": 109,
+            "lineEnd": 183,
+            "symbol": "main"
+          },
+          "facts": [
+            "读取 config.env；派生 Bot / Web 子进程；不是聊天业务转发服务。"
+          ]
+        },
+        {
+          "id": "bridge",
+          "label": "qq_openclaw_bridge + runtime",
+          "subtitle": "消息、表达、投递与后台工作器",
+          "kind": "business",
+          "module": "聊天大桥",
+          "groupId": "bot-process",
+          "source": {
+            "kind": "source",
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 283,
+            "lineEnd": 377,
+            "symbol": "run_bridge"
+          },
+          "facts": [
+            "一个进程内编排多条工作器；群、会话、投递分别有锁。",
+            "多路局部门控不等于目标中的统一认知内核。"
+          ]
+        },
+        {
+          "id": "models",
+          "label": "llm_router / qwen_agent",
+          "subtitle": "文本、深度、视觉、视频、云工具",
+          "kind": "component",
+          "module": "模型工具",
+          "groupId": "bot-process",
+          "source": {
+            "kind": "source",
+            "file": "bot/llm_router.py",
+            "lineStart": 75,
+            "lineEnd": 109
+          },
+          "facts": [
+            "直连 OpenAI-compatible；旧 OpenClaw 通道仍有条件分支。",
+            "Managed Agent 为独立 REST 会话，不是本地 MAA。"
+          ]
+        },
+        {
+          "id": "memory",
+          "label": "记忆与知识组件",
+          "subtitle": "persona / group / member / knowledge",
+          "kind": "data",
+          "module": "记忆证据",
+          "groupId": "bot-process",
+          "source": {
+            "kind": "source",
+            "file": "bot/memory_depth.py",
+            "lineStart": 247,
+            "lineEnd": 275,
+            "symbol": "build"
+          },
+          "facts": [
+            "多库并存：persona.db、群事实 JSON、知识 JSON、摘要和日志。"
+          ]
+        },
+        {
+          "id": "cognition",
+          "label": "self_model / cognition.db",
+          "subtitle": "事件、身份、证据、动作与 outbox",
+          "kind": "database",
+          "module": "记忆证据",
+          "groupId": "bot-process",
+          "source": {
+            "kind": "schema",
+            "file": "bot/self_model.py",
+            "lineStart": 32,
+            "lineEnd": 171
+          },
+          "facts": [
+            "consent / retraction / layer_revision 已有代码。",
+            "SQLite 写入 API 不等于所有状态已由单一内核串行接管。"
+          ]
+        },
+        {
+          "id": "shadow",
+          "label": "emotion_shadow（旁路）",
+          "subtitle": "shadow-v2；绝不驱动当前表达",
+          "kind": "component",
+          "module": "情感影子",
+          "groupId": "bot-process",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 197,
+            "lineEnd": 224,
+            "symbol": "tick"
+          },
+          "facts": [
+            "读 cognition 事件；冻结参数、游标、独立轨迹。",
+            "status.expression_control=false；阶段3仍被阻止。"
+          ]
+        },
+        {
+          "id": "web",
+          "label": "website / admin dashboard",
+          "subtitle": "状态观察与显式管理指令",
+          "kind": "service",
+          "module": "运行控制",
+          "groupId": "web-process",
+          "source": {
+            "kind": "source",
+            "file": "website/ceylan_dashboard.py",
+            "lineStart": 1136,
+            "lineEnd": 1229
+          },
+          "facts": [
+            "Web 与 Bot 进程内变量不共享；同机通过文件/SQLite 协作。",
+            "部分通道支持 bearer 同步；管理写入有作用域与版本门。"
+          ]
+        },
+        {
+          "id": "desktop",
+          "label": "qingyi_desktop / PySide6",
+          "subtitle": "本地桌宠、授权、跑单结果气泡",
+          "kind": "system",
+          "module": "桌面MAA",
+          "groupId": "local-desktop",
+          "source": {
+            "kind": "source",
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 1,
+            "lineEnd": 44
+          },
+          "facts": [
+            "P1 纯本地，云端链路 P2 未实现。"
+          ]
+        },
+        {
+          "id": "maa",
+          "label": "MaaCore / 本机模拟器",
+          "subtitle": "ctypes Asst* + ADB",
+          "kind": "external",
+          "groupId": "local-desktop",
+          "facts": [
+            "使用用户本地已安装 MaaCore.dll；不是 Maia / Managed Agent。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "s1",
+          "source": "launcher",
+          "target": "bridge",
+          "kind": "call",
+          "label": "启动 Bot 子进程",
+          "evidence": "source",
+          "site": {
+            "file": "launcher.py",
+            "lineStart": 180
+          }
+        },
+        {
+          "id": "s2",
+          "source": "launcher",
+          "target": "web",
+          "kind": "call",
+          "label": "启动 Web 子进程",
+          "evidence": "source",
+          "site": {
+            "file": "launcher.py",
+            "lineStart": 182
+          }
+        },
+        {
+          "id": "s3",
+          "source": "bridge",
+          "target": "qq",
+          "kind": "request",
+          "label": "WebSocket / OneBot",
+          "evidence": "source",
+          "site": {
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 313,
+            "lineEnd": 318
+          }
+        },
+        {
+          "id": "s4",
+          "source": "bridge",
+          "target": "models",
+          "kind": "call",
+          "label": "表达与工具调用",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 5438,
+            "lineEnd": 5441
+          }
+        },
+        {
+          "id": "s5",
+          "source": "bridge",
+          "target": "memory",
+          "kind": "call",
+          "label": "按层组装上下文",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 3504,
+            "lineEnd": 3515
+          }
+        },
+        {
+          "id": "s6",
+          "source": "bridge",
+          "target": "cognition",
+          "kind": "data",
+          "label": "事件 / 动作落账",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4620,
+            "lineEnd": 4628
+          }
+        },
+        {
+          "id": "s7",
+          "source": "shadow",
+          "target": "cognition",
+          "kind": "data",
+          "label": "只读源事件",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 205,
+            "lineEnd": 206
+          }
+        },
+        {
+          "id": "s8",
+          "source": "web",
+          "target": "shadow",
+          "kind": "call",
+          "label": "读取旁路状态",
+          "evidence": "source",
+          "site": {
+            "file": "website/ceylan_dashboard.py",
+            "lineStart": 1145,
+            "lineEnd": 1149
+          }
+        },
+        {
+          "id": "s9",
+          "source": "web",
+          "target": "cognition",
+          "kind": "call",
+          "label": "显式 consent / 撤证",
+          "evidence": "source",
+          "site": {
+            "file": "website/ceylan_dashboard.py",
+            "lineStart": 1180,
+            "lineEnd": 1194
+          }
+        },
+        {
+          "id": "s10",
+          "source": "desktop",
+          "target": "maa",
+          "kind": "call",
+          "label": "本地授权后执行",
+          "evidence": "source",
+          "site": {
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 233,
+            "lineEnd": 248
+          }
+        }
+      ],
+      "layout": {
+        "direction": "right",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "layered-0"
+      }
+    },
+    {
+      "meta": {
+        "title": "02 聊天全链：入站、上下文、表达、确认",
+        "diagramType": "architecture",
+        "viewId": "chat-chain",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "L3–L4 主路径与慢查询分支；每节点展开一组源码职责，不包含主控修复过程。",
+        "notes": [
+          "直接回复、自动接话和巡群汇入统一 ask_openclaw；并非每条消息必经模型。",
+          "首气泡 ≤2.5s 是验收目标，本次没有线上延迟测量。",
+          "本轮修复已部署：完整旧起手只删重复段；本地状态查询不联网；频率规则保持不变。"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "receive",
+          "label": "run_bridge 接收",
+          "subtitle": "回包先分流；消息队列有界",
+          "kind": "service",
+          "module": "运行控制",
+          "source": {
+            "kind": "source",
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 346,
+            "lineEnd": 377
+          },
+          "facts": [
+            "echo 回包喂等待器；accepted 检查群黑名单、自身消息与 message_id 去重。"
+          ]
+        },
+        {
+          "id": "observe",
+          "label": "群 / 私聊入站观察",
+          "subtitle": "解析文本、图片、语音并记事件",
+          "kind": "component",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4530,
+            "lineEnd": 4554
+          },
+          "facts": [
+            "addressed_to_self、address_basis、quoted、roleplay 是影子输入证据。",
+            "群入站调用 record_group_message；私聊每原始消息先单独记账。"
+          ]
+        },
+        {
+          "id": "eligibility",
+          "label": "方向与发言机会",
+          "subtitle": "不是给她的话不抢答",
+          "kind": "security",
+          "module": "会话仲裁",
+          "source": {
+            "kind": "source",
+            "file": "bot/conversation_plan.py",
+            "lineStart": 133,
+            "lineEnd": 208
+          },
+          "facts": [
+            "指向别人、过时消息、重复主题、没有可接内容可被排除。",
+            "自动接话还有概率、防抖、冷却与 group-turn 锁。"
+          ]
+        },
+        {
+          "id": "ask",
+          "label": "ask_openclaw",
+          "subtitle": "会话串行；冻结本轮证据",
+          "kind": "business",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7601,
+            "lineEnd": 7614,
+            "symbol": "ask_openclaw"
+          },
+          "facts": [
+            "consent 拒绝先退；trigger_ledger.capture 固定本轮 event IDs。"
+          ]
+        },
+        {
+          "id": "prompt",
+          "label": "提示词与多源上下文",
+          "subtitle": "稳定身份 + 裁决 + 对象 + 材料",
+          "kind": "component",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8316,
+            "lineEnd": 8359
+          },
+          "facts": [
+            "实时 affection.hint 是数字真值；过期好感记忆行被过滤。",
+            "当前节奏仍来自 _mood_hint；影子状态不注入。"
+          ]
+        },
+        {
+          "id": "generation",
+          "label": "call_openclaw / vision",
+          "subtitle": "模型角色、深度、预算与回退",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 5388,
+            "lineEnd": 5444
+          },
+          "facts": [
+            "兼容旧 OpenClaw；默认走 llm_router；长文 high，chat_fast none。",
+            "llm_router 记录 generation_request 请求哈希和层版本。"
+          ]
+        },
+        {
+          "id": "lookup",
+          "label": "_lookup_then_reply",
+          "subtitle": "慢工具后台交货 / 可选补充",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6048,
+            "lineEnd": 6064
+          },
+          "facts": [
+            "owed 请求与顺嘴查证区分；结果通过完整实体、领域、回答和时效门。",
+            "可选补充需看已发送内容与轮次，不把过时材料硬插入。",
+            "本地好感/自身状态整句识别在后台入口短路；模型搜索标记也受同一门约束。"
+          ]
+        },
+        {
+          "id": "send",
+          "label": "send_group/private_msg",
+          "subtitle": "清理标记、复读、沉默和干跑门",
+          "kind": "security",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8691,
+            "lineEnd": 8730
+          },
+          "facts": [
+            "发言文本清理不等于内容事实验证。",
+            "媒体路径也收口到 consent + durable claim + receipt。",
+            "新回复只去除已送达的完整首句，保留新尾句、数字和C++/C#符号差异。"
+          ]
+        },
+        {
+          "id": "submit",
+          "label": "_submit_chat / outbox",
+          "subtitle": "先持久认领，再 OneBot I/O",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 416,
+            "lineEnd": 456,
+            "symbol": "_submit_chat"
+          },
+          "facts": [
+            "pending→submitted→accepted/failed/unknown。",
+            "分块只有全部 accepted 才整体 accepted；unknown 不自动重发。"
+          ]
+        },
+        {
+          "id": "accepted",
+          "label": "确认后写历史与成长原料",
+          "subtitle": "accepted 不是对方已看到",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 517,
+            "lineEnd": 559,
+            "symbol": "_record_delivered"
+          },
+          "facts": [
+            "accepted 后入 histories、history_log、persona journal。",
+            "后台巩固不是把模型叙述直接当作外部完成证据。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "c1",
+          "source": "receive",
+          "target": "observe",
+          "kind": "call",
+          "label": "handle_event 分发",
+          "evidence": "source",
+          "site": {
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 341,
+            "lineEnd": 343
+          }
+        },
+        {
+          "id": "c2",
+          "source": "observe",
+          "target": "eligibility",
+          "kind": "call",
+          "label": "direction_of",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 10092,
+            "lineEnd": 10105
+          }
+        },
+        {
+          "id": "c3",
+          "source": "eligibility",
+          "target": "ask",
+          "kind": "optional",
+          "label": "允许才统一生成",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4272,
+            "lineEnd": 4274
+          }
+        },
+        {
+          "id": "c4",
+          "source": "ask",
+          "target": "prompt",
+          "kind": "call",
+          "label": "组装本轮材料",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8331,
+            "lineEnd": 8359
+          }
+        },
+        {
+          "id": "c5",
+          "source": "prompt",
+          "target": "generation",
+          "kind": "call",
+          "label": "发送模型请求",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8432,
+            "lineEnd": 8441
+          }
+        },
+        {
+          "id": "c6",
+          "source": "ask",
+          "target": "lookup",
+          "kind": "optional",
+          "label": "先接住后后台查",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8151,
+            "lineEnd": 8164
+          }
+        },
+        {
+          "id": "c7",
+          "source": "generation",
+          "target": "send",
+          "kind": "call",
+          "label": "候选答案交投递",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4281,
+            "lineEnd": 4285
+          }
+        },
+        {
+          "id": "c8",
+          "source": "lookup",
+          "target": "send",
+          "kind": "optional",
+          "label": "有依据才补发",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6290,
+            "lineEnd": 6309
+          }
+        },
+        {
+          "id": "c9",
+          "source": "send",
+          "target": "submit",
+          "kind": "call",
+          "label": "同意与持久发送",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8765,
+            "lineEnd": 8766
+          }
+        },
+        {
+          "id": "c10",
+          "source": "submit",
+          "target": "accepted",
+          "kind": "success",
+          "label": "仅确认后记录",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8845,
+            "lineEnd": 8849
+          }
+        }
+      ],
+      "layout": {
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "template-component-clusters-0"
+      }
+    },
+    {
+      "meta": {
+        "title": "03 上下文记忆：多库存储与读取边界",
+        "diagramType": "architecture",
+        "viewId": "context-memory",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "数据与消费组件级；展示真实多库，不把 cognition.db 当作所有记忆唯一数据库。",
+        "notes": [
+          "身份日内缓存受 cognition_cache_token 撤证即时失效，不必等次日。",
+          "群事实、知识库和旧摘要并非全部具有逐字段证据链。",
+          "private 视觉笔记限制源会话；group 视觉笔记代码并不限制同群。"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "context-ask",
+          "label": "ask_openclaw 上下文装配",
+          "kind": "business",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7777,
+            "lineEnd": 7855
+          },
+          "facts": [
+            "当前事实、群缓存、私聊摘要、人格、知识按不同入口注入。",
+            "检索去掉历史末条重复的当前用户消息；纯本地状态查询不拼上一轮旧搜索主题。"
+          ]
+        },
+        {
+          "id": "identity",
+          "label": "memory_depth.identity_block",
+          "subtitle": "常驻身份日快照",
+          "kind": "component",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/memory_depth.py",
+            "lineStart": 34,
+            "lineEnd": 81,
+            "symbol": "identity_block"
+          },
+          "facts": [
+            "默认420字符；按 day / path / cognition_token 缓存。"
+          ]
+        },
+        {
+          "id": "persona-db",
+          "label": "persona_store / persona.db",
+          "subtitle": "事实、经历、喜恶、元数据",
+          "kind": "database",
+          "module": "记忆证据",
+          "source": {
+            "kind": "schema",
+            "file": "bot/persona_store.py",
+            "lineStart": 22,
+            "lineEnd": 52
+          },
+          "facts": [
+            "tokens/importance/embedding 列；默认非 embedding 检索。",
+            "self.json 为兼容导出，不能据注释当成唯一真值。"
+          ]
+        },
+        {
+          "id": "group-facts",
+          "label": "group_memory_store",
+          "subtitle": "按群事实 JSON + 倒排索引",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/group_memory_store.py",
+            "lineStart": 1004,
+            "lineEnd": 1035
+          },
+          "facts": [
+            "按 group_id 读取；相关度、重要度、使用反馈和时间因子。"
+          ]
+        },
+        {
+          "id": "knowledge",
+          "label": "knowledge_base",
+          "subtitle": "世界知识 JSON / active 门",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/knowledge_base.py",
+            "lineStart": 97,
+            "lineEnd": 123
+          },
+          "facts": [
+            "evidence_url / evidence / verified / provenance。",
+            "archive / quarantined 默认不注入；类别配额8/6/6/5/5。"
+          ]
+        },
+        {
+          "id": "recall",
+          "label": "recall_link + text_tokens",
+          "subtitle": "跨库去重与有界排序",
+          "kind": "component",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/recall_link.py",
+            "lineStart": 61,
+            "lineEnd": 98
+          },
+          "facts": [
+            "Jaccard去重阈值0.55；重要度0.6；使用项0.75·ln(1+used)。",
+            "时间项3·2^(-age/30d)；是检索得分，不是情绪。"
+          ]
+        },
+        {
+          "id": "journal",
+          "label": "history / journal / summaries",
+          "subtitle": "近期对话与后台巩固原料",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/persona_growth.py",
+            "lineStart": 134,
+            "lineEnd": 153,
+            "symbol": "note_exchange"
+          },
+          "facts": [
+            "会话日志轮转不是生平账本；journal 带源事件 IDs。",
+            "member_memory 按人维护称呼/关系；私聊摘要按会话保存。"
+          ]
+        },
+        {
+          "id": "growth",
+          "label": "persona_growth.consolidate",
+          "subtitle": "新窗口→LLM候选→合并留版本",
+          "kind": "component",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/persona_growth.py",
+            "lineStart": 578,
+            "lineEnd": 661,
+            "symbol": "consolidate"
+          },
+          "facts": [
+            "解析失败不前移游标；self_view 变化写 consolidation+原始事件依据。",
+            "还有 persona 持久化、巩固等写入者，单一内核尚未完成。"
+          ]
+        },
+        {
+          "id": "vision-note",
+          "label": "vision_notes 可见性",
+          "subtitle": "敏感 / private 内容不进群",
+          "kind": "security",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/vision_notes.py",
+            "lineStart": 343,
+            "lineEnd": 362
+          },
+          "facts": [
+            "private 需要 session 完全匹配；group 类型在当前实现中可跨群可见。"
+          ]
+        },
+        {
+          "id": "retraction-token",
+          "label": "self_model 撤证与缓存令牌",
+          "subtitle": "原始观察不改；派生断言失效",
+          "kind": "security",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/self_model.py",
+            "lineStart": 992,
+            "lineEnd": 1066
+          },
+          "facts": [
+            "撤证标记 invalidation；身份摘要无字段溯源时保守整体抑制。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "m1",
+          "source": "context-ask",
+          "target": "identity",
+          "kind": "call",
+          "label": "system 身份",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 3495,
+            "lineEnd": 3499
+          }
+        },
+        {
+          "id": "m2",
+          "source": "identity",
+          "target": "persona-db",
+          "kind": "data",
+          "label": "读取人格档案",
+          "evidence": "source",
+          "site": {
+            "file": "bot/memory_depth.py",
+            "lineStart": 84,
+            "lineEnd": 87
+          }
+        },
+        {
+          "id": "m3",
+          "source": "context-ask",
+          "target": "group-facts",
+          "kind": "call",
+          "label": "当前群长期事实",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7779,
+            "lineEnd": 7780
+          }
+        },
+        {
+          "id": "m4",
+          "source": "context-ask",
+          "target": "knowledge",
+          "kind": "call",
+          "label": "相关知识块",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8140,
+            "lineEnd": 8144
+          }
+        },
+        {
+          "id": "m5",
+          "source": "context-ask",
+          "target": "recall",
+          "kind": "call",
+          "label": "剔除跨库重复",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7786,
+            "lineEnd": 7791
+          }
+        },
+        {
+          "id": "m6",
+          "source": "context-ask",
+          "target": "journal",
+          "kind": "data",
+          "label": "摘要 / 最近轮次",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7842,
+            "lineEnd": 7865
+          }
+        },
+        {
+          "id": "m7",
+          "source": "growth",
+          "target": "journal",
+          "kind": "data",
+          "label": "读取未巩固窗口",
+          "evidence": "source",
+          "site": {
+            "file": "bot/persona_growth.py",
+            "lineStart": 580,
+            "lineEnd": 582
+          }
+        },
+        {
+          "id": "m8",
+          "source": "growth",
+          "target": "persona-db",
+          "kind": "data",
+          "label": "合并与持久化",
+          "evidence": "source",
+          "site": {
+            "file": "bot/persona_growth.py",
+            "lineStart": 628,
+            "lineEnd": 661
+          }
+        },
+        {
+          "id": "m9",
+          "source": "context-ask",
+          "target": "vision-note",
+          "kind": "call",
+          "label": "按场景取图证据",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7878,
+            "lineEnd": 7884
+          }
+        },
+        {
+          "id": "m10",
+          "source": "identity",
+          "target": "retraction-token",
+          "kind": "call",
+          "label": "缓存撤证校验",
+          "evidence": "source",
+          "site": {
+            "file": "bot/memory_depth.py",
+            "lineStart": 44,
+            "lineEnd": 55
+          }
+        }
+      ],
+      "layout": {
+        "direction": "right",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "layered-3"
+      }
+    },
+    {
+      "meta": {
+        "title": "04 证据、自我、同意与动作 outbox",
+        "diagramType": "architecture",
+        "viewId": "cognition-evidence",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "self_model 表/API 与真实调用边；不把字段存在当作生产证据链已完成。",
+        "notes": [
+          "consent unknown 当前不是一律拒绝；显式 deny 优先，作用域包括 send / dm / group。",
+          "工具结果 success/failure/unknown 与 OneBot accepted/failed/unknown 是不同口径。",
+          "撤证不回滚已经发生的外部行为，也未证明所有旧 JSON 摘要均能精确重算。"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "event-ledger",
+          "label": "event / person",
+          "subtitle": "稳定身份、时间、去重、来源、可见性",
+          "kind": "database",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/self_model.py",
+            "lineStart": 305,
+            "lineEnd": 338,
+            "symbol": "record_event"
+          },
+          "facts": [
+            "ts 发生时间与 created 记录时间；dedupe 唯一。",
+            "actor_qq/topic_qq 经 person_id 存储，勿按字段名当作原始QQ。"
+          ]
+        },
+        {
+          "id": "autobiography",
+          "label": "episode / belief / revisions",
+          "subtitle": "支持/反驳、理由、证据集合",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "schema",
+            "file": "bot/self_model.py",
+            "lineStart": 84,
+            "lineEnd": 171
+          },
+          "facts": [
+            "包含 commitment、goal、self_view_rev；旧迁移 legacy 保守标记。",
+            "私聊显式 belief 有 ingest_explicit_belief 路径。"
+          ]
+        },
+        {
+          "id": "trigger",
+          "label": "trigger_ledger.capture",
+          "subtitle": "冻结输入而非投递时取新消息",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/trigger_ledger.py",
+            "lineStart": 17,
+            "lineEnd": 74
+          },
+          "facts": [
+            "TTL默认900s，每场景12事件，最多256场景。",
+            "latest 不看TTL，仅供明确最近联系依据使用。"
+          ]
+        },
+        {
+          "id": "action-ledger",
+          "label": "action 状态账本",
+          "subtitle": "topic / target / scope / evidence",
+          "kind": "database",
+          "module": "记忆证据",
+          "source": {
+            "kind": "schema",
+            "file": "bot/self_model.py",
+            "lineStart": 148,
+            "lineEnd": 164
+          },
+          "facts": [
+            "proposed→authorized→generated→submitted→accepted/failed/unknown。",
+            "当前发送路径可直接从 generated 建账；不是每次经历全部前态。",
+            "当前 curiosity 搜索也建 action，旧文档只统计对外发送已不是完整口径。"
+          ]
+        },
+        {
+          "id": "consent-ledger",
+          "label": "consent_record / revocation",
+          "subtitle": "显式同意不由好感推导",
+          "kind": "security",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/self_model.py",
+            "lineStart": 894,
+            "lineEnd": 924
+          },
+          "facts": [
+            "未撤回 deny 优先；撤销一条记录不等于删除历史。"
+          ]
+        },
+        {
+          "id": "submit-boundary",
+          "label": "_submit_chat",
+          "subtitle": "deny→持久认领→实际发送",
+          "kind": "business",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 416,
+            "lineEnd": 456
+          },
+          "facts": [
+            "每次发送再次检查 consent；模型生成前也检查。"
+          ]
+        },
+        {
+          "id": "durable-outbox",
+          "label": "action_outbox / outbox_part",
+          "subtitle": "逻辑key与不可变payload摘要",
+          "kind": "database",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/self_model.py",
+            "lineStart": 932,
+            "lineEnd": 989
+          },
+          "facts": [
+            "claim 只从 pending 原子改 submitted，I/O之前落盘。",
+            "结果不明不可重认领；避免把崩溃后的未知当可重试。"
+          ]
+        },
+        {
+          "id": "receipts",
+          "label": "OneBot 回执 / action_result",
+          "subtitle": "retcode与分块终态",
+          "kind": "data",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/self_model.py",
+            "lineStart": 694,
+            "lineEnd": 735,
+            "symbol": "mark_action"
+          },
+          "facts": [
+            "accepted 只证实接口接受，用户看到未知。",
+            "mark_action 为终态产生 action_result 事件；不能幽灵复活终态。"
+          ]
+        },
+        {
+          "id": "withdraw",
+          "label": "retract_evidence",
+          "subtitle": "保留 event；失效派生依据",
+          "kind": "security",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/self_model.py",
+            "lineStart": 992,
+            "lineEnd": 1018,
+            "symbol": "retract_evidence"
+          },
+          "facts": [
+            "belief置invalidated且confidence=NULL；goal无效化；其它关联对象加标记。",
+            "identity/personality 追加新消费版本，不覆盖历史。"
+          ]
+        },
+        {
+          "id": "layers",
+          "label": "layer_revision + 请求绑定",
+          "subtitle": "身份/边界/人格/工作状态版本",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/self_model.py",
+            "lineStart": 862,
+            "lineEnd": 882,
+            "symbol": "revise_layer"
+          },
+          "facts": [
+            "内容哈希不变不增版本；修订必须理由。",
+            "generation_request 保存真正序列化请求SHA256及各层哈希。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "trigger",
+          "target": "event-ledger",
+          "kind": "depends",
+          "label": "持有源事件ID",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4631,
+            "lineEnd": 4640
+          }
+        },
+        {
+          "id": "e2",
+          "source": "autobiography",
+          "target": "event-ledger",
+          "kind": "depends",
+          "label": "证据关联",
+          "evidence": "schema",
+          "site": {
+            "file": "bot/self_model.py",
+            "lineStart": 105,
+            "lineEnd": 122
+          }
+        },
+        {
+          "id": "e3",
+          "source": "action-ledger",
+          "target": "trigger",
+          "kind": "depends",
+          "label": "本轮冻结依据",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8664,
+            "lineEnd": 8671
+          }
+        },
+        {
+          "id": "e4",
+          "source": "submit-boundary",
+          "target": "consent-ledger",
+          "kind": "call",
+          "label": "拒绝优先",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 407,
+            "lineEnd": 422
+          }
+        },
+        {
+          "id": "e5",
+          "source": "submit-boundary",
+          "target": "durable-outbox",
+          "kind": "data",
+          "label": "prepare + claim",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 431,
+            "lineEnd": 434
+          }
+        },
+        {
+          "id": "e6",
+          "source": "submit-boundary",
+          "target": "receipts",
+          "kind": "call",
+          "label": "等待实际回包",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 440,
+            "lineEnd": 455
+          }
+        },
+        {
+          "id": "e7",
+          "source": "receipts",
+          "target": "action-ledger",
+          "kind": "data",
+          "label": "提交终态",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 449,
+            "lineEnd": 455
+          }
+        },
+        {
+          "id": "e8",
+          "source": "receipts",
+          "target": "event-ledger",
+          "kind": "data",
+          "label": "记录结果事件",
+          "evidence": "source",
+          "site": {
+            "file": "bot/self_model.py",
+            "lineStart": 715,
+            "lineEnd": 733
+          }
+        },
+        {
+          "id": "e9",
+          "source": "withdraw",
+          "target": "autobiography",
+          "kind": "data",
+          "label": "失效，不编造重算",
+          "evidence": "source",
+          "site": {
+            "file": "bot/self_model.py",
+            "lineStart": 1001,
+            "lineEnd": 1011
+          }
+        },
+        {
+          "id": "e10",
+          "source": "withdraw",
+          "target": "layers",
+          "kind": "data",
+          "label": "追加消费修订",
+          "evidence": "source",
+          "site": {
+            "file": "bot/self_model.py",
+            "lineStart": 1014,
+            "lineEnd": 1017
+          }
+        }
+      ],
+      "layout": {
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "layered-2"
+      }
+    },
+    {
+      "meta": {
+        "title": "05 自主行动与工具：机会不是发送命令",
+        "diagramType": "architecture",
+        "viewId": "autonomy-tools",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "自主求知、刷片、分享、好友私聊、签名与工具完成证据；并列工作器不是统一目标规划器。",
+        "notes": [
+          "默认值不是线上实参；面板 settings→autonomy_limits 热值优先于 env 与 fallback。",
+          "好友私聊阈值源码是 >=15，不是注释中的 >15。",
+          "签名走 social.set_signature；不声称已覆盖聊天 outbox 的所有门控。"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "opportunity",
+          "label": "机会 / 来源种子",
+          "subtitle": "档案、know愿望、真实群热度、未查清",
+          "kind": "component",
+          "module": "自主行动",
+          "source": {
+            "kind": "source",
+            "file": "bot/curiosity.py",
+            "lineStart": 283,
+            "lineEnd": 362
+          },
+          "facts": [
+            "tag 同源种子不重复加分；origin_events 保留起因。",
+            "没有合适候选允许等待，不凑每日条数。"
+          ]
+        },
+        {
+          "id": "curiosity-act",
+          "label": "curiosity.should_act / claim",
+          "subtitle": "分数、满足期、失败、预算",
+          "kind": "business",
+          "module": "自主行动",
+          "source": {
+            "kind": "source",
+            "file": "bot/curiosity.py",
+            "lineStart": 365,
+            "lineEnd": 408
+          },
+          "facts": [
+            "Σw·2^(-age/14d)，阈值3；满足10天；45天消退；失败3次止。",
+            "默认0次/日，只攒不动；并发默认1。"
+          ]
+        },
+        {
+          "id": "goal-execution",
+          "label": "_curiosity_act",
+          "subtitle": "goal + search action + tool_result",
+          "kind": "component",
+          "module": "自主行动",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6597,
+            "lineEnd": 6655
+          },
+          "facts": [
+            "目标成功标准为可追溯资料或明确未证实；parent_event可绑定源。",
+            "found 成功才close_goal(done)，失败abandoned，异常unknown。"
+          ]
+        },
+        {
+          "id": "search-read",
+          "label": "verified_search / web_read",
+          "subtitle": "实体领域回答时效 + 公网地址门",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/web_search.py",
+            "lineStart": 755,
+            "lineEnd": 807
+          },
+          "facts": [
+            "备选最多一条且保持完整实体；网页正文再verify_page。",
+            "web_read每跳DNS检查；GET、类型、字节、正文上限。"
+          ]
+        },
+        {
+          "id": "bili-auto",
+          "label": "bili_auto / bili_worker",
+          "subtitle": "公开热门→兴趣挑选→实际理解",
+          "kind": "component",
+          "module": "自主行动",
+          "source": {
+            "kind": "source",
+            "file": "bot/bili_auto.py",
+            "lineStart": 100,
+            "lineEnd": 127
+          },
+          "facts": [
+            "默认5条/日，间隔2h，本地时区9–23；拒新闻、已看与时长不符。",
+            "读字幕/评论/视频能力与登录态有关；只读不点赞收藏。"
+          ]
+        },
+        {
+          "id": "share-queue",
+          "label": "curiosity 唯一分享队列",
+          "subtitle": "来源可见性、收件人、内容冻结",
+          "kind": "data",
+          "module": "自主行动",
+          "source": {
+            "kind": "source",
+            "file": "bot/curiosity.py",
+            "lineStart": 477,
+            "lineEnd": 553
+          },
+          "facts": [
+            "默认1条/日、间隔6h、同话题永不重复；有实际内容才排队。",
+            "private来源只回来源人；unknown发送隔离，仅明确失败重试。"
+          ]
+        },
+        {
+          "id": "friend-dm",
+          "label": "proactive_dm",
+          "subtitle": "好友+好感+冷却+稳定机会表",
+          "kind": "component",
+          "module": "自主行动",
+          "source": {
+            "kind": "source",
+            "file": "bot/proactive_dm.py",
+            "lineStart": 97,
+            "lineEnd": 161
+          },
+          "facts": [
+            "默认UTC+8 9–23，日期种子2–4机会，90min总间隔、每人3天。",
+            "仅真实好友且score>=15；群近期说话优先，兜底高好感与最久未聊。",
+            "claim/release/decline/done区分失败、自愿不说和确认发送。"
+          ]
+        },
+        {
+          "id": "signature",
+          "label": "signature_worker / social",
+          "subtitle": "独立低频个性签名路径",
+          "kind": "component",
+          "module": "自主行动",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7024,
+            "lineEnd": 7060
+          },
+          "facts": [
+            "实际代码最小20h、10–22时窗、每轮概率0.4；并非严格一天一次。",
+            "NapCat主动加好友、QQ空间发布在capabilities中为False。"
+          ]
+        },
+        {
+          "id": "tool-evidence",
+          "label": "toolkit 完成证据门",
+          "subtitle": "内容可消费 ≠ 真实完成",
+          "kind": "security",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/toolkit.py",
+            "lineStart": 232,
+            "lineEnd": 290
+          },
+          "facts": [
+            "artifact需要本地非空文件；text需要非空文本；Agent只有叙述通常unknown。",
+            "工具执行ID去重，验证源synthetic不充真实影子样本。"
+          ]
+        },
+        {
+          "id": "delivery-autonomous",
+          "label": "聊天发送与回执",
+          "subtitle": "consent / frozen evidence / outbox",
+          "kind": "service",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6767,
+            "lineEnd": 6787
+          },
+          "facts": [
+            "分享先freeze_share_delivery，再send_private_msg；accepted才计分享。",
+            "好友生成喊错人则放弃，不因主人好感高转发给主人。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "a1",
+          "source": "opportunity",
+          "target": "curiosity-act",
+          "kind": "data",
+          "label": "真实种子积分",
+          "evidence": "source",
+          "site": {
+            "file": "bot/curiosity.py",
+            "lineStart": 287,
+            "lineEnd": 302
+          }
+        },
+        {
+          "id": "a2",
+          "source": "goal-execution",
+          "target": "curiosity-act",
+          "kind": "call",
+          "label": "先占行动额度",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6597,
+            "lineEnd": 6598
+          }
+        },
+        {
+          "id": "a3",
+          "source": "goal-execution",
+          "target": "search-read",
+          "kind": "call",
+          "label": "复用查证链路",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6624,
+            "lineEnd": 6628
+          }
+        },
+        {
+          "id": "a4",
+          "source": "goal-execution",
+          "target": "share-queue",
+          "kind": "success",
+          "label": "有结果才排分享",
+          "evidence": "source",
+          "site": {
+            "file": "bot/curiosity.py",
+            "lineStart": 429,
+            "lineEnd": 434
+          }
+        },
+        {
+          "id": "a5",
+          "source": "bili-auto",
+          "target": "share-queue",
+          "kind": "data",
+          "label": "看过内容供分享",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7383,
+            "lineEnd": 7408
+          }
+        },
+        {
+          "id": "a6",
+          "source": "share-queue",
+          "target": "delivery-autonomous",
+          "kind": "call",
+          "label": "冻结意图后投递",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6767,
+            "lineEnd": 6787
+          }
+        },
+        {
+          "id": "a7",
+          "source": "friend-dm",
+          "target": "delivery-autonomous",
+          "kind": "call",
+          "label": "归属校验后发送",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6972,
+            "lineEnd": 6991
+          }
+        },
+        {
+          "id": "a8",
+          "source": "search-read",
+          "target": "tool-evidence",
+          "kind": "call",
+          "label": "执行结果记账",
+          "evidence": "source",
+          "site": {
+            "file": "bot/web_read.py",
+            "lineStart": 168,
+            "lineEnd": 186
+          }
+        },
+        {
+          "id": "a9",
+          "source": "signature",
+          "target": "opportunity",
+          "kind": "optional",
+          "label": "并列机会机制（概念对照）",
+          "evidence": "inference"
+        }
+      ],
+      "layout": {
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "layered-2"
+      }
+    },
+    {
+      "meta": {
+        "title": "06 实时好感：已参与当前表达的独立关系信号",
+        "diagramType": "architecture",
+        "viewId": "live-affection",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "L4 affection 实际读写、衰减和使用方；非 emotion_shadow 状态。",
+        "notes": [
+          "源码DAILY_CAP=40；头部注释±20、DECAY_PER_DAY=1.2不能当实际运行规则。",
+          "好感自述可绕过算法每日额度和冷却；不能把所有路径都说成单次±5。",
+          "get()只是读取；三天后的回归在跨天 _entry 写入路径才执行，没有连续指数半衰期。"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "aff-input",
+          "label": "群 / 私聊消息",
+          "subtitle": "judge_and_bump 入口",
+          "kind": "service",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 10133,
+            "lineEnd": 10143
+          },
+          "facts": [
+            "群先过他人归属门；关键词仅取最明显一条，负面优先。"
+          ]
+        },
+        {
+          "id": "aff-judge",
+          "label": "affection.judge",
+          "subtitle": "加1–3 / 扣1–5的关键词规则",
+          "kind": "component",
+          "module": "实时好感",
+          "source": {
+            "kind": "source",
+            "file": "bot/affection.py",
+            "lineStart": 827,
+            "lineEnd": 845,
+            "symbol": "judge"
+          },
+          "facts": [
+            "道谢2、夸奖2、亲近3、一起1、记得2、关心3；负面优先。",
+            "不是四维情绪，也不是已实现的信任/亲密多维模型。"
+          ]
+        },
+        {
+          "id": "aff-budget",
+          "label": "冷却 / bump",
+          "subtitle": "每人每原因600s；单次±5",
+          "kind": "security",
+          "module": "实时好感",
+          "source": {
+            "kind": "source",
+            "file": "bot/affection.py",
+            "lineStart": 800,
+            "lineEnd": 824,
+            "symbol": "bump"
+          },
+          "facts": [
+            "范围[-50,100]；算法正负各每日40。",
+            "judge_and_bump 返回的delta不是严格裁剪后实际delta，报告不把日志当精密账本。"
+          ]
+        },
+        {
+          "id": "aff-self",
+          "label": "apply_self / promise / panel",
+          "subtitle": "本人报数、承诺、手动校正",
+          "kind": "component",
+          "module": "实时好感",
+          "source": {
+            "kind": "source",
+            "file": "bot/affection.py",
+            "lineStart": 450,
+            "lineEnd": 467
+          },
+          "facts": [
+            "自述绝对值/增量绕过每日额度和冷却；范围仍保留。",
+            "promise单次±5；退款最多10、近期扣分30min；同句5s去重。",
+            "pending询问120s；目标绑定为独立规则，不等于consent。"
+          ]
+        },
+        {
+          "id": "aff-store",
+          "label": "relationship/affection.json",
+          "subtitle": "score / day / gain / loss / history",
+          "kind": "data",
+          "module": "实时好感",
+          "source": {
+            "kind": "source",
+            "file": "bot/affection.py",
+            "lineStart": 769,
+            "lineEnd": 797
+          },
+          "facts": [
+            "普通人默认0；源码有特定关系种子，不展示私人QQ。",
+            "跨天且gap>3天：s←s·[1−min(0.4,0.1·(gap−3))]。",
+            "仅get不触发衰减；DECAY_PER_DAY常量未参与此公式。"
+          ]
+        },
+        {
+          "id": "aff-prompt",
+          "label": "hint / query_line",
+          "subtitle": "本轮精确分数与语气档",
+          "kind": "business",
+          "module": "实时好感",
+          "source": {
+            "kind": "source",
+            "file": "bot/affection.py",
+            "lineStart": 708,
+            "lineEnd": 720,
+            "symbol": "query_line"
+          },
+          "facts": [
+            "close>=55，warm>=20，normal>-10，cold>-30，其余hostile。",
+            "实时数值进入当前提示词；旧好感数字记忆被过滤。"
+          ]
+        },
+        {
+          "id": "aff-dm",
+          "label": "proactive_dm.decide",
+          "subtitle": "真实好友筛选 / 关系相关性",
+          "kind": "component",
+          "module": "自主行动",
+          "source": {
+            "kind": "source",
+            "file": "bot/proactive_dm.py",
+            "lineStart": 170,
+            "lineEnd": 209,
+            "symbol": "decide"
+          },
+          "facts": [
+            "score>=15 是门槛，不能覆盖隐私、收件人或拒绝。"
+          ]
+        },
+        {
+          "id": "aff-panel",
+          "label": "Web affection API",
+          "subtitle": "snapshot / set_score",
+          "kind": "service",
+          "module": "运行控制",
+          "source": {
+            "kind": "source",
+            "file": "website/ceylan_dashboard.py",
+            "lineStart": 1879,
+            "lineEnd": 1915
+          },
+          "facts": [
+            "与prompt同一好感模块；不是影子情绪面板。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "f1",
+          "source": "aff-input",
+          "target": "aff-judge",
+          "kind": "call",
+          "label": "判定关键词",
+          "evidence": "source",
+          "site": {
+            "file": "bot/affection.py",
+            "lineStart": 889,
+            "lineEnd": 892
+          }
+        },
+        {
+          "id": "f2",
+          "source": "aff-judge",
+          "target": "aff-budget",
+          "kind": "call",
+          "label": "冷却后计分",
+          "evidence": "source",
+          "site": {
+            "file": "bot/affection.py",
+            "lineStart": 894,
+            "lineEnd": 910
+          }
+        },
+        {
+          "id": "f3",
+          "source": "aff-budget",
+          "target": "aff-store",
+          "kind": "data",
+          "label": "裁剪后保存",
+          "evidence": "source",
+          "site": {
+            "file": "bot/affection.py",
+            "lineStart": 804,
+            "lineEnd": 823
+          }
+        },
+        {
+          "id": "f4",
+          "source": "aff-self",
+          "target": "aff-store",
+          "kind": "data",
+          "label": "不同权限写分",
+          "evidence": "source",
+          "site": {
+            "file": "bot/affection.py",
+            "lineStart": 539,
+            "lineEnd": 571
+          }
+        },
+        {
+          "id": "f5",
+          "source": "aff-prompt",
+          "target": "aff-store",
+          "kind": "data",
+          "label": "get 精确真值",
+          "evidence": "source",
+          "site": {
+            "file": "bot/affection.py",
+            "lineStart": 714,
+            "lineEnd": 720
+          }
+        },
+        {
+          "id": "f6",
+          "source": "aff-dm",
+          "target": "aff-store",
+          "kind": "data",
+          "label": "读取scores筛人",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 6868,
+            "lineEnd": 6884
+          }
+        },
+        {
+          "id": "f7",
+          "source": "aff-panel",
+          "target": "aff-store",
+          "kind": "data",
+          "label": "读取 / 手动设定",
+          "evidence": "source",
+          "site": {
+            "file": "website/ceylan_dashboard.py",
+            "lineStart": 1888,
+            "lineEnd": 1913
+          }
+        },
+        {
+          "id": "f8",
+          "source": "aff-self",
+          "target": "aff-prompt",
+          "kind": "data",
+          "label": "后续轮次读最新分",
+          "evidence": "source",
+          "site": {
+            "file": "bot/affection.py",
+            "lineStart": 961,
+            "lineEnd": 981
+          }
+        }
+      ],
+      "layout": {
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "layered-2"
+      }
+    },
+    {
+      "meta": {
+        "title": "07 情感影子算法：v1与v2，明确不驱动表达",
+        "diagramType": "architecture",
+        "viewId": "emotion-shadow",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "L4 事件资格、确定性评估、解析恢复、冲击裁剪、持久消费和审计。",
+        "notes": [
+          "2026-11-10线上实测：shadow-v2运行、backlog=0、expression_control=false、stage3_ready=false。",
+          "四维仅未校准计算变量，六特质固定不学习；无主观体验证明。",
+          "情感核无独立习惯化衰减因子；当前饱和是clip，不等于好奇度满足10天。"
+        ]
+      },
+      "groups": [
+        {
+          "id": "shadow-only",
+          "label": "旁路观察边界：expression_control=false",
+          "kind": "security"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "emotion-events",
+          "label": "cognition.db 源事件",
+          "subtitle": "群、私聊、工具、动作回执",
+          "kind": "database",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 238,
+            "lineEnd": 269
+          },
+          "facts": [
+            "按rowid消费；effective=max(state.at,ts,created)；未来created延后。"
+          ]
+        },
+        {
+          "id": "emotion-gate",
+          "label": "_source_evaluation 证据门",
+          "subtitle": "真实来源 / 时间 / JSON / 归属",
+          "kind": "security",
+          "module": "情感影子",
+          "groupId": "shadow-only",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 91,
+            "lineEnd": 126
+          },
+          "facts": [
+            "legacy、synthetic、test、probe、verify隔离；要求0<ts<=created。",
+            "group/private_message归一message；引用/扮演不形成直接评价。"
+          ]
+        },
+        {
+          "id": "kernel-v1",
+          "label": "emotion_core shadow-v1",
+          "subtitle": "冻结基线与精确恢复原语",
+          "kind": "component",
+          "module": "情感影子",
+          "groupId": "shadow-only",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_core.py",
+            "lineStart": 22,
+            "lineEnd": 38
+          },
+          "facts": [
+            "b=(0,.25,.5,0)，τ=(7200,1800,3600,600)s。",
+            "界限效价[-1,1]，其余[0,1]；六特质(.6,.5,.6,.6,.5,.5)。",
+            "v1普通消息仅attention+.02；三条明确夸奖v+.04,c+.015。"
+          ]
+        },
+        {
+          "id": "kernel-v2",
+          "label": "emotion_dynamics shadow-v2",
+          "subtitle": "VOCAB_VERSION=v2.1",
+          "kind": "business",
+          "module": "情感影子",
+          "groupId": "shadow-only",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_dynamics.py",
+            "lineStart": 9,
+            "lineEnd": 35
+          },
+          "facts": [
+            "v2定向互动arousal+.02；工具arousal+.01。",
+            "直接喜欢/夸奖v+.04,c+.015；责备v−.025,c−.015；正词先于负词。",
+            "词表版本不进入PARAMETERS哈希，不能仅凭hash证明词表未变。"
+          ]
+        },
+        {
+          "id": "advance-impulse",
+          "label": "advance → apply_event",
+          "subtitle": "先恢复，再clip冲击",
+          "kind": "component",
+          "module": "情感影子",
+          "groupId": "shadow-only",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_dynamics.py",
+            "lineStart": 102,
+            "lineEnd": 150
+          },
+          "facts": [
+            "x=b+(x−b)e^(−Δt/τ)，随后x'=clip(x+δ)。",
+            "半衰期τln2：效价83.18min、激活20.79min、掌控41.59min、注意6.93min。",
+            "工具success/failure只使c±.025、attention+.01；unknown不驱动。"
+          ]
+        },
+        {
+          "id": "shadow-db",
+          "label": "shadow_run / shadow_event",
+          "subtitle": "参数hash、游标、before/after",
+          "kind": "database",
+          "module": "情感影子",
+          "groupId": "shadow-only",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 197,
+            "lineEnd": 295
+          },
+          "facts": [
+            "BEGIN IMMEDIATE；每源rowid与event_id唯一；游标身份不符失败。",
+            "首启从当前末尾开始；旧历史另作retrospective不充实时样本。",
+            "v1冻结旧库保留；按hash选择v2新库，不覆盖旧轨迹。",
+            "运行快照：processed=1778、cursor=3082；累计数不是验收完成率。"
+          ]
+        },
+        {
+          "id": "shadow-audit",
+          "label": "replay / diagnostics / calibration",
+          "subtitle": "复算≠参数有效≠接管授权",
+          "kind": "security",
+          "module": "情感影子",
+          "groupId": "shadow-only",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 506,
+            "lineEnd": 563
+          },
+          "facts": [
+            "默认24h、120有效事件、gap比例<=.25；心跳<90s，积压0。",
+            "四维非零、聊天工具双来源、源事件重评、至少两种工具含成功失败。",
+            "复算误差<=1e−10；ready_for_review不是stage3_ready。"
+          ]
+        },
+        {
+          "id": "emotion-dashboard",
+          "label": "Web 影子卡片",
+          "subtitle": "只读旁路状态与独立回放",
+          "kind": "service",
+          "module": "运行控制",
+          "source": {
+            "kind": "source",
+            "file": "website/ceylan_dashboard.py",
+            "lineStart": 1136,
+            "lineEnd": 1155
+          },
+          "facts": [
+            "与fun mood及当前随机表达节奏分开。"
+          ]
+        },
+        {
+          "id": "current-rhythm",
+          "label": "当前 _MOODS 表达节奏",
+          "subtitle": "独立旧链：20%随机换档",
+          "kind": "component",
+          "module": "会话仲裁",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 2437,
+            "lineEnd": 2463
+          },
+          "facts": [
+            "平静/开心/无聊/不爽/困；换档后hold2–5次调用。",
+            "明确声明只是语气参考，不是真实情绪或经历。",
+            "本视图没有shadow→表达的控制边。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "h1",
+          "source": "emotion-gate",
+          "target": "emotion-events",
+          "kind": "data",
+          "label": "读取源事件",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 238,
+            "lineEnd": 255
+          }
+        },
+        {
+          "id": "h2",
+          "source": "emotion-gate",
+          "target": "kernel-v2",
+          "kind": "call",
+          "label": "合格才appraise",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 121,
+            "lineEnd": 124
+          }
+        },
+        {
+          "id": "h3",
+          "source": "kernel-v2",
+          "target": "kernel-v1",
+          "kind": "depends",
+          "label": "复用基线 / 初始评估",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_dynamics.py",
+            "lineStart": 113,
+            "lineEnd": 115
+          }
+        },
+        {
+          "id": "h4",
+          "source": "kernel-v2",
+          "target": "advance-impulse",
+          "kind": "call",
+          "label": "版本化转移",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_dynamics.py",
+            "lineStart": 140,
+            "lineEnd": 150
+          }
+        },
+        {
+          "id": "h5",
+          "source": "advance-impulse",
+          "target": "shadow-db",
+          "kind": "data",
+          "label": "事务保存轨迹",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 269,
+            "lineEnd": 272
+          }
+        },
+        {
+          "id": "h6",
+          "source": "shadow-audit",
+          "target": "shadow-db",
+          "kind": "data",
+          "label": "独立复算与覆盖核验",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 311,
+            "lineEnd": 337
+          }
+        },
+        {
+          "id": "h7",
+          "source": "emotion-dashboard",
+          "target": "shadow-audit",
+          "kind": "call",
+          "label": "只读status",
+          "evidence": "source",
+          "site": {
+            "file": "website/ceylan_dashboard.py",
+            "lineStart": 1145,
+            "lineEnd": 1146
+          }
+        }
+      ],
+      "layout": {
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "layered-0"
+      }
+    },
+    {
+      "meta": {
+        "title": "08 独立效价候选回放：不是实时情感状态",
+        "diagramType": "architecture",
+        "viewId": "valence-counterfactual",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "候选队列、语义标注、来源核验、独立全历史回放；名称按实际代码。",
+        "notes": [
+          "工作树未找到valence-candidate-v3；实际核心标识valence-integration-v1，底层参数shadow-v2。",
+          "候选done标签不直接修改shadow_run、shadow_event或affection.json。",
+          "这是反事实观察；历史标签晚到可重建，不计实时样本、在线时长或接管进度。",
+          "2026-11-10快照：candidate_integrated_replay；1416源/24纳入/1392排除；counts_for_live=false。"
+        ]
+      },
+      "groups": [
+        {
+          "id": "counterfactual",
+          "label": "独立回放边界 counts_for_live=false / expression_control=false",
+          "kind": "security"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "label-source",
+          "label": "已观察且明确给她的消息",
+          "subtitle": "private / at / reply / direct_name",
+          "kind": "data",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4530,
+            "lineEnd": 4554
+          },
+          "facts": [
+            "源event文本最多200字；候选最多300字。"
+          ]
+        },
+        {
+          "id": "candidate-db",
+          "label": "valence_candidates.db",
+          "subtitle": "pending / done / error",
+          "kind": "database",
+          "module": "效价候选",
+          "source": {
+            "kind": "schema",
+            "file": "bot/valence_candidates.py",
+            "lineStart": 14,
+            "lineEnd": 37
+          },
+          "facts": [
+            "event_id唯一；最多3次尝试，保留model/confidence/reason/updated。"
+          ]
+        },
+        {
+          "id": "judge-label",
+          "label": "drain / _judge_llm",
+          "subtitle": "态度标签，不让模型写情绪数值",
+          "kind": "component",
+          "module": "效价候选",
+          "source": {
+            "kind": "source",
+            "file": "bot/valence_candidates.py",
+            "lineStart": 123,
+            "lineEnd": 148
+          },
+          "facts": [
+            "praise / rebuke / neutral / uncertain；temperature=0，120tokens，25s，无fallback。",
+            "每轮默认2条；失败仍pending，第3次error。"
+          ]
+        },
+        {
+          "id": "snapshot-source",
+          "label": "cognition只读源快照",
+          "subtitle": "每请求重读全历史",
+          "kind": "database",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 566,
+            "lineEnd": 591
+          },
+          "facts": [
+            "独立于实时consumer cursor；迟到标签不会因cursor已过而永久丢掉。"
+          ]
+        },
+        {
+          "id": "source-check",
+          "label": "源身份与语境门",
+          "subtitle": "文本 / kind / session / ts / basis",
+          "kind": "security",
+          "module": "效价候选",
+          "groupId": "counterfactual",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 595,
+            "lineEnd": 623
+          },
+          "facts": [
+            "不存在、未来、来源不符、引用、扮演、不指向她都排除。",
+            "旧200字截断事件允许候选此前缀；非任意文本放行。"
+          ]
+        },
+        {
+          "id": "integration",
+          "label": "integrated_appraisal",
+          "subtitle": "valence-integration-v1",
+          "kind": "business",
+          "module": "效价候选",
+          "groupId": "counterfactual",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_dynamics.py",
+            "lineStart": 29,
+            "lineEnd": 90
+          },
+          "facts": [
+            "有候选时需done、praise/rebuke、model+reason、有限confidence>=.8。",
+            "uncertain/neutral/pending/error抑制词表效价，不悄悄回退为夸奖。",
+            "无候选时词表可作对照；先清零v/c，再最多一次±冲击。"
+          ]
+        },
+        {
+          "id": "counter-state",
+          "label": "独立局部state与rows",
+          "subtitle": "恢复 / clip / 最后到now",
+          "kind": "data",
+          "module": "效价候选",
+          "groupId": "counterfactual",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 624,
+            "lineEnd": 655
+          },
+          "facts": [
+            "只对消息/有标签源建回放；不得称包含全部实时工具事件的完整轨迹。",
+            "included指标表示效价证据通过；排除效价不一定意味着attention/arousal零。"
+          ]
+        },
+        {
+          "id": "counter-panel",
+          "label": "status.valence_samples",
+          "subtitle": "独立展示候选与原词表对照",
+          "kind": "service",
+          "module": "运行控制",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 658,
+            "lineEnd": 663
+          },
+          "facts": [
+            "stage3_ready固定False；与实时state分字段返回。",
+            "隔离测试验证晚标注不改实时state/timeline，测试不是线上观测。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "v1",
+          "source": "label-source",
+          "target": "candidate-db",
+          "kind": "data",
+          "label": "只登记一次",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4552,
+            "lineEnd": 4554
+          }
+        },
+        {
+          "id": "v2",
+          "source": "judge-label",
+          "target": "candidate-db",
+          "kind": "data",
+          "label": "保存解释候选",
+          "evidence": "source",
+          "site": {
+            "file": "bot/valence_candidates.py",
+            "lineStart": 180,
+            "lineEnd": 188
+          }
+        },
+        {
+          "id": "v3",
+          "source": "source-check",
+          "target": "candidate-db",
+          "kind": "data",
+          "label": "读取label快照",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 579,
+            "lineEnd": 582
+          }
+        },
+        {
+          "id": "v4",
+          "source": "source-check",
+          "target": "snapshot-source",
+          "kind": "data",
+          "label": "核对真实源",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 603,
+            "lineEnd": 618
+          }
+        },
+        {
+          "id": "v5",
+          "source": "source-check",
+          "target": "integration",
+          "kind": "call",
+          "label": "合格才整合",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 619,
+            "lineEnd": 623
+          }
+        },
+        {
+          "id": "v6",
+          "source": "integration",
+          "target": "counter-state",
+          "kind": "data",
+          "label": "单次候选冲击",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 624,
+            "lineEnd": 637
+          }
+        },
+        {
+          "id": "v7",
+          "source": "counter-panel",
+          "target": "counter-state",
+          "kind": "call",
+          "label": "按需只读重建",
+          "evidence": "source",
+          "site": {
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 660,
+            "lineEnd": 663
+          }
+        }
+      ],
+      "layout": {
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "template-component-clusters-0"
+      }
+    },
+    {
+      "meta": {
+        "title": "09 群发言门控：准入、时序、归属到发送",
+        "diagramType": "flowchart",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "自动接话路径决策级；直接@、工具、媒体和私聊的差异见报告，不把本图强加所有路径。",
+        "notes": [
+          "FORCE=8为源码默认，线上覆盖为5；只在joinable允许时兜底，不能抢别人的双人对话。",
+          "概率门不是命令；模型仍能沉默，生成期间新消息会使候选过时。",
+          "本轮逐函数AST比较频率逻辑不变；线上settings部署前后逐字节一致。"
+        ]
+      },
+      "layout": {
+        "primaryPath": [
+          "g-start",
+          "g-accept",
+          "g-opportunity",
+          "g-lock",
+          "g-owner",
+          "g-fresh",
+          "g-send",
+          "g-result",
+          "g-done"
+        ],
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "template-workflow-spine-1"
+      },
+      "nodes": [
+        {
+          "id": "g-start",
+          "label": "收到新群消息",
+          "kind": "start",
+          "module": "运行控制",
+          "source": {
+            "kind": "source",
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 346,
+            "lineEnd": 375
+          }
+        },
+        {
+          "id": "g-accept",
+          "label": "消息与队列可准入？",
+          "kind": "decision",
+          "module": "运行控制",
+          "source": {
+            "kind": "source",
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 117,
+            "lineEnd": 129
+          },
+          "facts": [
+            "message类型、非自身、非屏蔽群、message_id去重；pending默认128。"
+          ]
+        },
+        {
+          "id": "g-opportunity",
+          "label": "防抖冷却与机会通过？",
+          "kind": "decision",
+          "module": "会话仲裁",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4098,
+            "lineEnd": 4112
+          },
+          "facts": [
+            "默认2s防抖、10s冷却、每3条概率.55；主人每2条概率.85；8条兜底机会。",
+            "线上实值：防抖2s、冷却6s、每3条概率0.9、FORCE5、最少1人类；本轮不改。"
+          ]
+        },
+        {
+          "id": "g-lock",
+          "label": "群turn锁与发言闸可用？",
+          "kind": "decision",
+          "module": "会话仲裁",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4159,
+            "lineEnd": 4187
+          },
+          "facts": [
+            "group-turn串行；发言busy TTL默认45s；cursor跳过已处理消息；画图pending可阻断。"
+          ]
+        },
+        {
+          "id": "g-owner",
+          "label": "归属与joinable允许？",
+          "kind": "decision",
+          "module": "会话仲裁",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4141,
+            "lineEnd": 4156
+          },
+          "facts": [
+            "target必须在新消息窗口；明确别人对话不可被FORCE覆盖。"
+          ]
+        },
+        {
+          "id": "g-fresh",
+          "label": "候选未过时且非沉默？",
+          "kind": "decision",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4264,
+            "lineEnd": 4282
+          },
+          "facts": [
+            "生成前后检查新seq；ask_openclaw会话串行并冻结证据。"
+          ]
+        },
+        {
+          "id": "g-send",
+          "label": "清理、同意与outbox认领通过？",
+          "kind": "decision",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 416,
+            "lineEnd": 434
+          },
+          "facts": [
+            "控制标记、复读、重复、干跑门；delivery锁；显式deny优先；未知已投递不可重认领。"
+          ]
+        },
+        {
+          "id": "g-result",
+          "label": "OneBot明确accepted？",
+          "kind": "decision",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 437,
+            "lineEnd": 456
+          },
+          "facts": [
+            "retcode=0 / status=ok；超时unknown，拒绝failed，分块要全部accepted。"
+          ]
+        },
+        {
+          "id": "g-done",
+          "label": "记录接受与发言冷却",
+          "kind": "end",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8768,
+            "lineEnd": 8777
+          }
+        },
+        {
+          "id": "g-stop",
+          "label": "本次不发 / 保留未证实",
+          "kind": "end",
+          "module": "会话仲裁",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4255,
+            "lineEnd": 4263
+          }
+        },
+        {
+          "id": "g-unknown",
+          "label": "记failed或unknown，不称送达",
+          "kind": "end",
+          "module": "记忆证据",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 448,
+            "lineEnd": 456
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "g1",
+          "source": "g-start",
+          "target": "g-accept",
+          "kind": "flow",
+          "label": "入口",
+          "evidence": "source",
+          "site": {
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 363,
+            "lineEnd": 367
+          }
+        },
+        {
+          "id": "g2",
+          "source": "g-accept",
+          "target": "g-opportunity",
+          "kind": "yes",
+          "label": "准入",
+          "evidence": "source",
+          "site": {
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 367,
+            "lineEnd": 375
+          }
+        },
+        {
+          "id": "g3",
+          "source": "g-accept",
+          "target": "g-stop",
+          "kind": "no",
+          "label": "拒绝或满队列",
+          "evidence": "source",
+          "site": {
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 363,
+            "lineEnd": 367
+          }
+        },
+        {
+          "id": "g4",
+          "source": "g-opportunity",
+          "target": "g-lock",
+          "kind": "yes",
+          "label": "到机会",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4112
+          }
+        },
+        {
+          "id": "g5",
+          "source": "g-opportunity",
+          "target": "g-stop",
+          "kind": "no",
+          "label": "未到或冷却",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4106,
+            "lineEnd": 4111
+          }
+        },
+        {
+          "id": "g6",
+          "source": "g-lock",
+          "target": "g-owner",
+          "kind": "yes",
+          "label": "可继续",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4199,
+            "lineEnd": 4201
+          }
+        },
+        {
+          "id": "g7",
+          "source": "g-lock",
+          "target": "g-stop",
+          "kind": "no",
+          "label": "占用或禁用",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4173,
+            "lineEnd": 4187
+          }
+        },
+        {
+          "id": "g8",
+          "source": "g-owner",
+          "target": "g-fresh",
+          "kind": "yes",
+          "label": "对象一致",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4235,
+            "lineEnd": 4238
+          }
+        },
+        {
+          "id": "g9",
+          "source": "g-owner",
+          "target": "g-stop",
+          "kind": "no",
+          "label": "别人的对话",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4255,
+            "lineEnd": 4263
+          }
+        },
+        {
+          "id": "g10",
+          "source": "g-fresh",
+          "target": "g-send",
+          "kind": "yes",
+          "label": "候选有效",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4281,
+            "lineEnd": 4285
+          }
+        },
+        {
+          "id": "g11",
+          "source": "g-fresh",
+          "target": "g-stop",
+          "kind": "no",
+          "label": "新消息或沉默",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 4277,
+            "lineEnd": 4282
+          }
+        },
+        {
+          "id": "g12",
+          "source": "g-send",
+          "target": "g-result",
+          "kind": "yes",
+          "label": "先落盘后I/O",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 431,
+            "lineEnd": 440
+          }
+        },
+        {
+          "id": "g13",
+          "source": "g-send",
+          "target": "g-stop",
+          "kind": "no",
+          "label": "拒绝或已认领",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 420,
+            "lineEnd": 434
+          }
+        },
+        {
+          "id": "g14",
+          "source": "g-result",
+          "target": "g-done",
+          "kind": "yes",
+          "label": "接受≠已读",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 8765,
+            "lineEnd": 8777
+          }
+        },
+        {
+          "id": "g15",
+          "source": "g-result",
+          "target": "g-unknown",
+          "kind": "no",
+          "label": "拒绝或无回包",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 441,
+            "lineEnd": 456
+          }
+        }
+      ]
+    },
+    {
+      "meta": {
+        "title": "10 阶段路线：以证据验收，不虚构日期",
+        "diagramType": "architecture",
+        "viewId": "roadmap",
+        "sourceRef": "docs/人格内核路线.md + current audit implementation",
+        "locale": "zh-CN",
+        "scope": "阶段0–5与当前2.5准入，明确代码存在、历史观测和拟议接管不同；没有排期承诺。",
+        "notes": [
+          "路线文档2026-11-07快照不是2026-11-10线上结论；阶段0/1不能因表存在就通过。",
+          "2.5全部pass仅review_ready，stage3a仍review_required，stage3b blocked。",
+          "接管应移除同职责旧随机判断，不允许两套状态驱动同时发号施令。"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "phase0",
+          "label": "阶段0 统一证据（代码在）",
+          "subtitle": "事件/人物/动作/结果可追溯",
+          "kind": "component",
+          "module": "阶段路线",
+          "source": {
+            "kind": "document",
+            "file": "docs/人格内核路线.md",
+            "lineStart": 328,
+            "lineEnd": 332
+          },
+          "facts": [
+            "验收：当前动作全有起因与归属，终态全有匹配回执；不能只看累计条数。",
+            "旧文档快照partial；本次未重做生产阶段判定。"
+          ]
+        },
+        {
+          "id": "phase1",
+          "label": "阶段1 自传体记忆（代码在）",
+          "subtitle": "belief / revision / evidence",
+          "kind": "component",
+          "module": "阶段路线",
+          "source": {
+            "kind": "document",
+            "file": "docs/人格内核路线.md",
+            "lineStart": 328,
+            "lineEnd": 335
+          },
+          "facts": [
+            "验收：能回答什么改变了观点，给出真实源事件；legacy不充数。"
+          ]
+        },
+        {
+          "id": "phase2",
+          "label": "阶段2 影子（当前代码）",
+          "subtitle": "v2消费者 + v1兼容 + 独立效价回放",
+          "kind": "component",
+          "module": "阶段路线",
+          "source": {
+            "kind": "source",
+            "file": "bot/emotion_shadow.py",
+            "lineStart": 658,
+            "lineEnd": 688
+          },
+          "facts": [
+            "验收：非空轨迹可复算、无无因跳变、来源覆盖、恢复与积压可核验。",
+            "expression_control=false，未校准；不把影子通过当心理有效。"
+          ]
+        },
+        {
+          "id": "phase25",
+          "label": "阶段2.5 准入（当前代码）",
+          "subtitle": "organic证据 + 独立工程契约",
+          "kind": "security",
+          "module": "阶段路线",
+          "source": {
+            "kind": "source",
+            "file": "bot/phase_audit.py",
+            "lineStart": 563,
+            "lineEnd": 707
+          },
+          "facts": [
+            "当前动作全有existing evidence / identity / receipts；非legacy信念全有证据；self_view有直接源。",
+            "shadow review及consent/outbox/retraction/version/model-switch五类契约。",
+            "部署边界有效时区分当前观察与历史；unknown/not_observed/not_verified均阻断。",
+            "本次发布后：7 pass/5 not_observed；缺真实新样本不回填伪造，仍不授权阶段3。"
+          ]
+        },
+        {
+          "id": "phase3a",
+          "label": "拟议3a 状态与表达灰度评审",
+          "subtitle": "统一状态注入，替换随机节奏",
+          "kind": "component",
+          "module": "阶段路线",
+          "source": {
+            "kind": "source",
+            "file": "bot/phase_audit.py",
+            "lineStart": 697,
+            "lineEnd": 706
+          },
+          "facts": [
+            "不是已授权功能；无blocker仅review_required。",
+            "退出：面板与表达同因、重启/换模型连续、延迟实测、可撤回。"
+          ]
+        },
+        {
+          "id": "phase3b",
+          "label": "拟议3b 表达扩大接管",
+          "subtitle": "保留隐私和能力硬约束",
+          "kind": "component",
+          "module": "阶段路线",
+          "source": {
+            "kind": "source",
+            "file": "bot/phase_audit.py",
+            "lineStart": 704,
+            "lineEnd": 706
+          },
+          "facts": [
+            "当前代码固定blocked；不存在ready自动授权路径。",
+            "路线文档阶段3要求情绪/关系/目标注入统一，不能并行保留旧同职责驱动。"
+          ]
+        },
+        {
+          "id": "phase4",
+          "label": "拟议4 低风险自主目标接管",
+          "subtitle": "先检索/整理/草稿，再外部动作",
+          "kind": "component",
+          "module": "阶段路线",
+          "source": {
+            "kind": "document",
+            "file": "docs/人格内核路线.md",
+            "lineStart": 330,
+            "lineEnd": 335
+          },
+          "facts": [
+            "已有各类worker不等于统一接管完成。",
+            "退出：每目标有归属、终点、放弃条件、预算、结果确认与等待候选。"
+          ]
+        },
+        {
+          "id": "phase5",
+          "label": "拟议5 持续自我修订",
+          "subtitle": "长期证据→反例→版本轨迹",
+          "kind": "component",
+          "module": "阶段路线",
+          "source": {
+            "kind": "document",
+            "file": "docs/人格内核路线.md",
+            "lineStart": 182,
+            "lineEnd": 197
+          },
+          "facts": [
+            "有API和版本表不等于长期修订能力已验收。",
+            "退出：有支持/反例、撤证后再评估、能解释变化；反思不得证明自己。"
+          ]
+        },
+        {
+          "id": "ablation",
+          "label": "贯穿验收：消融与恢复",
+          "subtitle": "提示词→记忆→状态→目标",
+          "kind": "security",
+          "module": "阶段路线",
+          "source": {
+            "kind": "document",
+            "file": "docs/人格内核路线.md",
+            "lineStart": 308,
+            "lineEnd": 322
+          },
+          "facts": [
+            "不仅多说情绪词；记忆选择、目标选择、等待和行动必须产生可解释变化。",
+            "重启、模型切换、拒绝、未知、撤证与回退均应可复核。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "r1",
+          "source": "phase0",
+          "target": "phase1",
+          "kind": "optional",
+          "label": "证据达标后推进",
+          "evidence": "document"
+        },
+        {
+          "id": "r2",
+          "source": "phase1",
+          "target": "phase2",
+          "kind": "optional",
+          "label": "可靠经历后演化影子",
+          "evidence": "document"
+        },
+        {
+          "id": "r3",
+          "source": "phase2",
+          "target": "phase25",
+          "kind": "optional",
+          "label": "进入严格准入审查",
+          "evidence": "source",
+          "site": {
+            "file": "bot/phase_audit.py",
+            "lineStart": 629,
+            "lineEnd": 662
+          }
+        },
+        {
+          "id": "r4",
+          "source": "phase25",
+          "target": "phase3a",
+          "kind": "optional",
+          "label": "全pass仅待人工评审",
+          "evidence": "source",
+          "site": {
+            "file": "bot/phase_audit.py",
+            "lineStart": 697,
+            "lineEnd": 706
+          }
+        },
+        {
+          "id": "r5",
+          "source": "phase3a",
+          "target": "phase3b",
+          "kind": "optional",
+          "label": "拟议扩大；当前blocked",
+          "evidence": "document"
+        },
+        {
+          "id": "r6",
+          "source": "phase3b",
+          "target": "phase4",
+          "kind": "optional",
+          "label": "拟议，达退出条件再推进",
+          "evidence": "document"
+        },
+        {
+          "id": "r7",
+          "source": "phase4",
+          "target": "phase5",
+          "kind": "optional",
+          "label": "拟议长期证据闭环",
+          "evidence": "document"
+        },
+        {
+          "id": "r8",
+          "source": "phase3a",
+          "target": "ablation",
+          "kind": "depends",
+          "label": "接管必须通过消融验收",
+          "evidence": "document"
+        }
+      ],
+      "layout": {
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "template-component-clusters-0"
+      }
+    },
+    {
+      "meta": {
+        "title": "11 部署与桌宠 MAA：本地与云端严格分开",
+        "diagramType": "architecture",
+        "viewId": "deployment-maa",
+        "sourceRef": "working tree 2026-11-10 + AGENTS.md documented deployment",
+        "locale": "zh-CN",
+        "scope": "运行面与本地动作授权路径；2026-11-10已核验港机服务，未实测本机MAA；云端不远控MAA。",
+        "notes": [
+          "同步脚本位于仓库外仓库外的同步脚本，仅报告引用；不制造越界source锚。",
+          "desktop不在同步白名单；没有已实现的港机→本机MAA远控边。",
+          "港机已完成快照部署、文件哈希、69项相关测试和5组契约；本地DLL/ADB本轮未实测。"
+        ]
+      },
+      "groups": [
+        {
+          "id": "cloud-zone",
+          "label": "用户所称港机 / 云端（地域与运行态未实测）",
+          "kind": "runtime"
+        },
+        {
+          "id": "desktop-zone",
+          "label": "本地 Windows P1 / desktop",
+          "kind": "runtime"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "cloud-service",
+          "label": "qqbot.service → launcher",
+          "subtitle": "文档部署：Bot与Web子进程",
+          "kind": "system",
+          "module": "运行控制",
+          "groupId": "cloud-zone",
+          "source": {
+            "kind": "document",
+            "file": "AGENTS.md",
+            "lineStart": 14,
+            "lineEnd": 15
+          },
+          "facts": [
+            "2026-11-10发布后qqbot.service=active；Bot日志确认已连接本机NapCat。"
+          ]
+        },
+        {
+          "id": "cloud-napcat",
+          "label": "NapCat OneBot WebSocket",
+          "kind": "external",
+          "groupId": "cloud-zone",
+          "facts": [
+            "QQ登录态；部署同步不重启NapCat。",
+            "运行快照：OneBot ws://127.0.0.1:3001；不在图中保存登录凭据。"
+          ]
+        },
+        {
+          "id": "cloud-data",
+          "label": "云端 config.env / data",
+          "subtitle": "本地副本不是生产真值",
+          "kind": "database",
+          "module": "运行控制",
+          "groupId": "cloud-zone",
+          "source": {
+            "kind": "document",
+            "file": "AGENTS.md",
+            "lineStart": 14,
+            "lineEnd": 15
+          },
+          "facts": [
+            "同步只bot/website/launcher，永不覆盖config.env与data。"
+          ]
+        },
+        {
+          "id": "pet-controller",
+          "label": "Controller / PetWindow / Tray",
+          "subtitle": "桌宠可隐藏，关闭面板非退出",
+          "kind": "service",
+          "module": "桌面MAA",
+          "groupId": "desktop-zone",
+          "source": {
+            "kind": "source",
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 94,
+            "lineEnd": 125
+          },
+          "facts": [
+            "设备探测后台每8s；模型线程池2；设备池1。"
+          ]
+        },
+        {
+          "id": "discover-plan",
+          "label": "discovery + plan",
+          "subtitle": "只读本机MAA配置→任务意图",
+          "kind": "component",
+          "module": "桌面MAA",
+          "groupId": "desktop-zone",
+          "source": {
+            "kind": "source",
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 136,
+            "lineEnd": 161
+          },
+          "facts": [
+            "加载gui.new.json优先；SAFE/CONFIRM/MANUAL；daily_plan排除MANUAL。"
+          ]
+        },
+        {
+          "id": "maa-gate",
+          "label": "runner.check_gates",
+          "subtitle": "资源授权 / GUI占用 / ADB / 设备",
+          "kind": "security",
+          "module": "桌面MAA",
+          "groupId": "desktop-zone",
+          "source": {
+            "kind": "source",
+            "file": "desktop/runner.py",
+            "lineStart": 81,
+            "lineEnd": 101,
+            "symbol": "check_gates"
+          },
+          "facts": [
+            "开工线程重新检查，不用旧探测缓存当授权。",
+            "资源任务参数指纹匹配；spending开工前消费一次性授权。"
+          ]
+        },
+        {
+          "id": "maa-runner",
+          "label": "Runner → MaaCore",
+          "subtitle": "装载 / 连接回执 / 排队 / AsstStart",
+          "kind": "business",
+          "module": "桌面MAA",
+          "groupId": "desktop-zone",
+          "source": {
+            "kind": "source",
+            "file": "desktop/runner.py",
+            "lineStart": 150,
+            "lineEnd": 205
+          },
+          "facts": [
+            "connect请求被接受不等于连接成功；还读connect_result。",
+            "回调含错误时AllTasksCompleted不得改为全成功；卡住不擅自硬停。"
+          ]
+        },
+        {
+          "id": "local-game",
+          "label": "MaaCore.dll + ADB + 模拟器",
+          "kind": "external",
+          "groupId": "desktop-zone",
+          "facts": [
+            "本机用户已安装资源；不打包不分发MAA。"
+          ]
+        },
+        {
+          "id": "local-state",
+          "label": "desktop/state config + ledger",
+          "subtitle": "授权、别吵、配额、跑单真实结果",
+          "kind": "data",
+          "module": "桌面MAA",
+          "groupId": "desktop-zone",
+          "source": {
+            "kind": "source",
+            "file": "desktop/store.py",
+            "lineStart": 11,
+            "lineEnd": 28
+          },
+          "facts": [
+            "主动气泡6/日，间隔1200s；模型生成后展示前再次检查。",
+            "旧未结束跑单补interrupted，不能当完成。"
+          ]
+        },
+        {
+          "id": "desktop-voice",
+          "label": "brain + voice + llm_router",
+          "subtitle": "真实结果转口语 / 可沉默",
+          "kind": "component",
+          "module": "桌面MAA",
+          "groupId": "desktop-zone",
+          "source": {
+            "kind": "source",
+            "file": "desktop/voice.py",
+            "lineStart": 57,
+            "lineEnd": 83
+          },
+          "facts": [
+            "say为文字气泡生成，不是音频TTS证据。",
+            "无模型/超时/空内容显式兜底；结果通知不能用沉默掩盖失败。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "d1",
+          "source": "cloud-service",
+          "target": "cloud-napcat",
+          "kind": "request",
+          "label": "OneBot连接",
+          "evidence": "source",
+          "site": {
+            "file": "bot/ceylan_runtime.py",
+            "lineStart": 312,
+            "lineEnd": 318
+          }
+        },
+        {
+          "id": "d2",
+          "source": "cloud-service",
+          "target": "cloud-data",
+          "kind": "data",
+          "label": "运行实例自己的状态",
+          "evidence": "source",
+          "site": {
+            "file": "launcher.py",
+            "lineStart": 118,
+            "lineEnd": 129
+          }
+        },
+        {
+          "id": "d3",
+          "source": "pet-controller",
+          "target": "discover-plan",
+          "kind": "call",
+          "label": "rescan读取",
+          "evidence": "source",
+          "site": {
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 144,
+            "lineEnd": 158
+          }
+        },
+        {
+          "id": "d4",
+          "source": "pet-controller",
+          "target": "maa-gate",
+          "kind": "call",
+          "label": "开工前现查",
+          "evidence": "source",
+          "site": {
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 233,
+            "lineEnd": 237
+          }
+        },
+        {
+          "id": "d5",
+          "source": "maa-gate",
+          "target": "maa-runner",
+          "kind": "success",
+          "label": "所有门通过才执行",
+          "evidence": "source",
+          "site": {
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 238,
+            "lineEnd": 248
+          }
+        },
+        {
+          "id": "d6",
+          "source": "maa-runner",
+          "target": "local-game",
+          "kind": "call",
+          "label": "本地Asst*与ADB",
+          "evidence": "source",
+          "site": {
+            "file": "desktop/runner.py",
+            "lineStart": 166,
+            "lineEnd": 203
+          }
+        },
+        {
+          "id": "d7",
+          "source": "maa-runner",
+          "target": "local-state",
+          "kind": "data",
+          "label": "回调结果写账本",
+          "evidence": "source",
+          "site": {
+            "file": "desktop/runner.py",
+            "lineStart": 275,
+            "lineEnd": 285
+          }
+        },
+        {
+          "id": "d8",
+          "source": "pet-controller",
+          "target": "local-state",
+          "kind": "data",
+          "label": "确认参数指纹",
+          "evidence": "source",
+          "site": {
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 192,
+            "lineEnd": 197
+          }
+        },
+        {
+          "id": "d9",
+          "source": "pet-controller",
+          "target": "desktop-voice",
+          "kind": "call",
+          "label": "结果气泡线程生成",
+          "evidence": "source",
+          "site": {
+            "file": "desktop/qingyi_desktop.py",
+            "lineStart": 253,
+            "lineEnd": 273
+          }
+        }
+      ],
+      "layout": {
+        "direction": "down",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "template-component-clusters-0"
+      }
+    },
+    {
+      "meta": {
+        "title": "12 多模态与工具结果：传感、生成、证据、外发",
+        "diagramType": "architecture",
+        "viewId": "multimodal",
+        "sourceRef": "working tree 2026-11-10",
+        "locale": "zh-CN",
+        "scope": "L3–L4感知和产物工具；区分供应商返回内容、落盘证据和QQ接口接受。",
+        "notes": [
+          "模型名称为源码默认角色，不代表线上已配置或实际可用。",
+          "媒体公网短链有签名与到期边界；不是所有内容都可跨场景公开。",
+          "工具产物本地非空才证明artifact完成；URL或LLM说已做过不是充分证据。"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "media-ingest",
+          "label": "NapCat附件 / 链接入站",
+          "subtitle": "图片、语音、文件、B站视频",
+          "kind": "service",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 3696,
+            "lineEnd": 3771
+          },
+          "facts": [
+            "原始segment含登录态引用；QQ CDN过期链接不直接当永久图。"
+          ]
+        },
+        {
+          "id": "qq-image",
+          "label": "napcat_channel.get_image",
+          "subtitle": "本地文件 / base64 / freshURL",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/napcat_channel.py",
+            "lineStart": 130,
+            "lineEnd": 183
+          },
+          "facts": [
+            "echo异步回包；图片文件读取有大小限制；HTTP仅兜底。"
+          ]
+        },
+        {
+          "id": "asr-channel",
+          "label": "asr.transcribe_async",
+          "subtitle": "语音先转写再进入对话",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/asr.py",
+            "lineStart": 169,
+            "lineEnd": 188
+          },
+          "facts": [
+            "无内容不伪造听见；工具text证据单独记账。"
+          ]
+        },
+        {
+          "id": "vision-channel",
+          "label": "视觉模型 + vision_notes",
+          "subtitle": "图片像素 / 表情含义卡分流",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 2944,
+            "lineEnd": 3015
+          },
+          "facts": [
+            "截图/照片带原图；表情包可只给校准含义卡；敏感内容受可见性门。",
+            "VISION并发默认2；图入站后台识别与回复预算分离。"
+          ]
+        },
+        {
+          "id": "video-channel",
+          "label": "bili / bili_vision / call_video",
+          "subtitle": "元数据、字幕、评论、视频理解",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/bili_vision.py",
+            "lineStart": 97,
+            "lineEnd": 148
+          },
+          "facts": [
+            "视频角色默认qwen3.8-omni-flash；不回退纯文本角色。",
+            "字幕是辅助，不能把只拿到metadata说成看过完整内容。"
+          ]
+        },
+        {
+          "id": "generation-tools",
+          "label": "image_gen / tts",
+          "subtitle": "绘图、朗读、唱歌多通道",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/image_gen.py",
+            "lineStart": 538,
+            "lineEnd": 555
+          },
+          "facts": [
+            "绘图条件回退flare→qwen-image→Agent→直连；按配置可agent优先。",
+            "说话DashScope→可选Agent→直连；唱歌3.0→3.1-next；Suno未接入。"
+          ]
+        },
+        {
+          "id": "managed-agent",
+          "label": "qwen_agent REST会话",
+          "subtitle": "建会话→发事件→轮询→下载",
+          "kind": "component",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/qwen_agent.py",
+            "lineStart": 113,
+            "lineEnd": 219
+          },
+          "facts": [
+            "tarot/zhouyi/fortune/video/excel由toolkit映射；不等于这些外部skill已可用。"
+          ]
+        },
+        {
+          "id": "tool-result-gate",
+          "label": "toolkit._tool_outcome",
+          "subtitle": "完成证据与叙述分层",
+          "kind": "security",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/toolkit.py",
+            "lineStart": 240,
+            "lineEnd": 290
+          },
+          "facts": [
+            "artifact本地非空；text非空；Agent叙述可unknown；failure不冒充完成。",
+            "record_tool_result按执行ID去重；保留session/visibility/evidence_origin。"
+          ]
+        },
+        {
+          "id": "media-public",
+          "label": "media_public.publish / resolve",
+          "subtitle": "限定目录、签名、到期",
+          "kind": "security",
+          "module": "模型工具",
+          "source": {
+            "kind": "source",
+            "file": "bot/media_public.py",
+            "lineStart": 87,
+            "lineEnd": 140
+          },
+          "facts": [
+            "外部模型需要可取URL时使用；不可视为永久公开所有私人媒体。"
+          ]
+        },
+        {
+          "id": "media-submit",
+          "label": "_submit_media / _submit_chat",
+          "subtitle": "统一同意、投递认领与回执",
+          "kind": "service",
+          "module": "聊天大桥",
+          "source": {
+            "kind": "source",
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 459,
+            "lineEnd": 486
+          },
+          "facts": [
+            "媒体生成成功 ≠ QQ已接受 ≠ 用户已看到。"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "mm1",
+          "source": "media-ingest",
+          "target": "qq-image",
+          "kind": "call",
+          "label": "图引用解析取像素",
+          "evidence": "source",
+          "site": {
+            "file": "bot/napcat_channel.py",
+            "lineStart": 146,
+            "lineEnd": 162
+          }
+        },
+        {
+          "id": "mm2",
+          "source": "media-ingest",
+          "target": "asr-channel",
+          "kind": "call",
+          "label": "语音转写",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 10071,
+            "lineEnd": 10081
+          }
+        },
+        {
+          "id": "mm3",
+          "source": "qq-image",
+          "target": "vision-channel",
+          "kind": "data",
+          "label": "可用图与含义卡",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 2944,
+            "lineEnd": 3015
+          }
+        },
+        {
+          "id": "mm4",
+          "source": "media-ingest",
+          "target": "video-channel",
+          "kind": "optional",
+          "label": "B站链接后台理解",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 7631,
+            "lineEnd": 7635
+          }
+        },
+        {
+          "id": "mm5",
+          "source": "generation-tools",
+          "target": "managed-agent",
+          "kind": "optional",
+          "label": "配置允许时回退",
+          "evidence": "source",
+          "site": {
+            "file": "bot/image_gen.py",
+            "lineStart": 633,
+            "lineEnd": 649
+          }
+        },
+        {
+          "id": "mm6",
+          "source": "generation-tools",
+          "target": "tool-result-gate",
+          "kind": "call",
+          "label": "一次执行一次结果",
+          "evidence": "source",
+          "site": {
+            "file": "bot/image_gen.py",
+            "lineStart": 551,
+            "lineEnd": 554
+          }
+        },
+        {
+          "id": "mm7",
+          "source": "asr-channel",
+          "target": "tool-result-gate",
+          "kind": "call",
+          "label": "非空转写证据",
+          "evidence": "source",
+          "site": {
+            "file": "bot/asr.py",
+            "lineStart": 183,
+            "lineEnd": 186
+          }
+        },
+        {
+          "id": "mm8",
+          "source": "managed-agent",
+          "target": "tool-result-gate",
+          "kind": "data",
+          "label": "叙述不自动完成",
+          "evidence": "source",
+          "site": {
+            "file": "bot/toolkit.py",
+            "lineStart": 315,
+            "lineEnd": 326
+          }
+        },
+        {
+          "id": "mm9",
+          "source": "media-public",
+          "target": "video-channel",
+          "kind": "provides",
+          "label": "临时可取媒体URL",
+          "evidence": "source",
+          "site": {
+            "file": "bot/bili.py",
+            "lineStart": 321,
+            "lineEnd": 330
+          }
+        },
+        {
+          "id": "mm10",
+          "source": "generation-tools",
+          "target": "media-submit",
+          "kind": "optional",
+          "label": "产物另过发送门",
+          "evidence": "source",
+          "site": {
+            "file": "bot/qq_openclaw_bridge.py",
+            "lineStart": 9774,
+            "lineEnd": 9794
+          }
+        }
+      ],
+      "layout": {
+        "direction": "right",
+        "version": "templates-v4-clearance-compact-elkjs-0.11.0",
+        "strategy": "layered-3"
+      }
+    }
+  ]
+}

@@ -21,21 +21,26 @@ import csv
 import io
 import re
 from project_config import SITE_DISPLAY_NAME, SITE_TAGLINE, BOT_DISPLAY_NAME, BOT_NODE_LABEL
+import visit_log
 
 
 app = Flask(__name__)
 
 app.secret_key = os.environ["CEYLAN_SECRET_KEY"]
 
+# Localhost/dev uses plain HTTP; forcing Secure cookies there breaks login sessions.
+# Enable Secure cookies only when explicitly requested (e.g. behind an HTTPS reverse proxy).
+_IS_LOCAL = os.environ.get("WEB_HOST", "127.0.0.1") in ("127.0.0.1", "localhost", "::1")
+
 app.config.update(
-    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SECURE=(os.environ.get("FORCE_SECURE_COOKIES", "0") == "1") and not _IS_LOCAL,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Strict",
     PERMANENT_SESSION_LIFETIME=1800,
 )
 
 
-DB_PATH = os.environ.get("CEYLAN_DB_PATH", "/var/lib/ceylan-status/visitors.db")
+DB_PATH = os.environ.get("CEYLAN_DB_PATH", "./data/visitors.db")
 
 ADMIN_USER = os.environ.get(
     "CEYLAN_ADMIN_USER",
@@ -43,6 +48,10 @@ ADMIN_USER = os.environ.get(
 )
 
 ADMIN_HASH = os.environ["CEYLAN_ADMIN_HASH"]
+
+# 观察员：独立凭据，只读。没配这两个键时观察员登录不存在，admin 行为不变。
+OBSERVER_USER = os.environ.get("CEYLAN_OBSERVER_USER", "").strip()
+OBSERVER_HASH = os.environ.get("CEYLAN_OBSERVER_HASH", "")
 
 RETENTION_DAYS = 30
 
@@ -104,6 +113,9 @@ def init_db():
     ON visits(ip)
     """)
 
+    # 按天的计数器，不参与保留期删除 —— 「累计访问」必须有个不会掉的东西兜着。
+    conn.commit()
+    visit_log.ensure_schema(conn)
     conn.commit()
     conn.close()
 
@@ -158,30 +170,120 @@ def status():
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
 
+    # 这机器只有 1.7G 内存，光看百分比看不出还剩多少；
+    # 把绝对量、swap、负载、网络、服务存活一起给，面板那一栏就填满了。
+    try:
+        swap = psutil.swap_memory()
+    except Exception:
+        swap = None
+    try:
+        cpu_count = psutil.cpu_count(logical=True) or 1
+        load1, load5, load15 = psutil.getloadavg()
+    except Exception:
+        cpu_count, load1, load5, load15 = 1, 0.0, 0.0, 0.0
+
+    net_sent = net_recv = 0
+    try:
+        io = psutil.net_io_counters()
+        net_sent, net_recv = int(io.bytes_sent), int(io.bytes_recv)
+    except Exception:
+        pass
+
+    try:
+        proc_count = len(psutil.pids())
+    except Exception:
+        proc_count = 0
+
+    # 服务存活：napcat 是 docker 容器，不是 systemd 服务，得分开查
+    svc = {"qqbot": False, "napcat": False}
+    try:
+        import subprocess as _sp
+        _r = _sp.run(["systemctl", "is-active", "qqbot"],
+                     capture_output=True, text=True, timeout=3)
+        svc["qqbot"] = (_r.stdout or "").strip() == "active"
+        # docker inspect 比 systemctl 更准：容器本身在跑才叫活着
+        _r = _sp.run(["docker", "inspect", "-f", "{{.State.Running}}", "napcat"],
+                     capture_output=True, text=True, timeout=6)
+        svc["napcat"] = (_r.stdout or "").strip().lower() == "true"
+    except Exception:
+        pass
+
     return jsonify({
-        "cpu": round(
-            psutil.cpu_percent(interval=0.15),
-            1
-        ),
-        "memory": round(
-            memory.percent,
-            1
-        ),
-        "disk": round(
-            disk.percent,
-            1
-        ),
-        "load": round(
-            psutil.getloadavg()[0],
-            2
-        ),
-        "uptime": int(
-            time.time()
-            -
-            psutil.boot_time()
-        )
+        "cpu": round(psutil.cpu_percent(interval=0.15), 1),
+        "cpu_count": cpu_count,
+        "memory": round(memory.percent, 1),
+        "mem_total_mb": int(memory.total / 1048576),
+        "mem_used_mb": int((memory.total - memory.available) / 1048576),
+        "disk": round(disk.percent, 1),
+        "disk_total_gb": round(disk.total / 1073741824, 1),
+        "disk_free_gb": round(disk.free / 1073741824, 1),
+        "load": round(load1, 2),
+        "load5": round(load5, 2),
+        "load15": round(load15, 2),
+        "swap_pct": round(swap.percent, 1) if swap else 0,
+        "swap_used_mb": int(swap.used / 1048576) if swap else 0,
+        "swap_total_mb": int(swap.total / 1048576) if swap else 0,
+        "net_sent_mb": round(net_sent / 1048576, 1),
+        "net_recv_mb": round(net_recv / 1048576, 1),
+        "procs": proc_count,
+        "services": svc,
+        "uptime": int(time.time() - psutil.boot_time())
     })
 
+
+# 服务端自动记录访问：不依赖前端 beacon。
+# 原来只有 POST /api/visit 会写库，但页面里没有那段 JS，导致 visitors.db 一直是空的。
+# 哪些路径算「有人来逛网站」统一由 visit_log 说，口径只有一处。
+_visit_recent = {}
+
+
+def _auto_record_visit():
+    try:
+        path = request.path or "/"
+        if not visit_log.is_visitor_path(path):
+            return
+        if request.method != "GET":
+            return
+        ip = real_ip() or "-"
+        now_ts = time.time()
+        # 同一 IP + 路径 60 秒内只记一次，避免刷新刷屏
+        key = (ip, path)
+        if now_ts - float(_visit_recent.get(key, 0)) < 60:
+            return
+        _visit_recent[key] = now_ts
+        if len(_visit_recent) > 500:
+            for k in list(_visit_recent)[:200]:
+                _visit_recent.pop(k, None)
+
+        conn = db()
+        try:
+            init_db()
+            vid = "%s|%s|%d" % (ip, path[:40], int(now_ts // 60))
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO visits (visit_id, ts, ip, path, referrer, ua, language) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (vid,
+                 now_iso,
+                 ip,
+                 path[:200],
+                 (request.headers.get("Referer") or "")[:200],
+                 (request.headers.get("User-Agent") or "")[:300],
+                 (request.headers.get("Accept-Language") or "")[:60]))
+            # 计数器只认真正落库的那次：INSERT OR IGNORE 被 visit_id 挡掉时
+            # rowcount=0，同一 IP 同一页 60 秒内的重复刷新不该再 +1。
+            if cur.rowcount:
+                visit_log.bump(conn, now_iso)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+@app.before_request
+def _hook_visit():
+    _auto_record_visit()
 
 @app.post("/api/visit")
 def record_visit():
@@ -281,7 +383,7 @@ def record_visit():
 
     cleanup_old_rows(conn)
 
-    conn.execute("""
+    cur = conn.execute("""
     INSERT OR IGNORE INTO visits (
         visit_id,
         ts,
@@ -304,8 +406,7 @@ def record_visit():
         ?,?,?,?,?,?,?,?,
         ?,?,?,?,?,?,?,?
     )
-    """, (
-        visit_id,
+    """, (        visit_id,
         now,
         ip,
         country,
@@ -323,6 +424,8 @@ def record_visit():
         platform
     ))
 
+    if cur.rowcount and visit_log.is_visitor_path(path):
+        visit_log.bump(conn, now)
     conn.commit()
     conn.close()
 
@@ -425,6 +528,11 @@ def admin_required(fn):
         if not session.get(
             "ceylan_admin"
         ):
+            # API 请求必须返回 JSON，不能重定向。
+            # 之前这里一律 redirect 到登录页，前端 fetch 拿到 HTML 后
+            # JSON.parse 就报 "Unexpected token '<'"——会话一过期面板满屏报错。
+            if request.path.startswith("/admin/api/"):
+                return jsonify({"error": "unauthorized", "need_login": True}), 401
             return redirect(
                 url_for(
                     "admin_login"
@@ -437,6 +545,46 @@ def admin_required(fn):
         )
 
     return wrapped
+
+
+def _current_role():
+    """当前会话角色。旧会话只有 ceylan_admin 没有 role，一律按 admin 对待，
+    部署时在线的管理员不会被降级。"""
+    if not session.get("ceylan_admin"):
+        return None
+    return session.get("ceylan_role") or "admin"
+
+
+@app.before_request
+def _observer_readonly_gate():
+    # 观察员能看整个面板，但任何写操作都不放行 —— 门禁在视图之前，
+    # 各扩展模块里的几十个 POST/PUT/DELETE 不需要逐个改。
+    if _current_role() != "observer":
+        return None
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        # 登录二维码拿到手就能扫码接管她的 QQ，这不是「观察」的一部分。
+        if request.path == "/admin/api/bot/napcat/qr":
+            return jsonify({"error": "observer_readonly",
+                            "message": "观察员账号不能获取 QQ 登录二维码"}), 403
+        return None
+    if request.path == "/admin/login":
+        return None  # 允许换账号登录（仍要凭据）
+    if request.path.startswith("/admin"):
+        if request.path.startswith("/admin/api/"):
+            return jsonify({"error": "observer_readonly",
+                            "message": "观察员账号只读，不能修改面板"}), 403
+        return Response("观察员账号只读，不能修改面板", status=403,
+                        mimetype="text/plain")
+    return None
+
+
+@app.get("/admin/api/me")
+def admin_me():
+    role = _current_role()
+    if role is None:
+        return jsonify({"error": "unauthorized", "need_login": True}), 401
+    return jsonify({"ok": True, "role": role,
+                    "username": OBSERVER_USER if role == "observer" else ADMIN_USER})
 
 
 LOGIN_TEMPLATE = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>管理员登录 · CeylanCLC</title><style>\n:root{color-scheme:dark;--bg:#090e17;--panel:#101824;--line:#233042;--muted:#8b9cb3;--text:#e7eef8;--accent:#63d5ef;--green:#6cdcb0;--red:#f99595;--amber:#ebc477}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}a{color:inherit;text-decoration:none}button,input,select{font:inherit}button,a,input,summary,select{ -webkit-tap-highlight-color:transparent}a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}button{cursor:pointer}svg{vertical-align:middle}.sidebar{width:226px;position:fixed;inset:0 auto 0 0;border-right:1px solid var(--line);background:#0c131e;display:flex;flex-direction:column;padding:30px 18px;z-index:10}.brand{font-size:20px;font-weight:800;letter-spacing:1px;padding:0 14px}.brand span{color:var(--accent)}.brand-sub{font-size:10px;letter-spacing:2.8px;color:#70849e;margin:4px 14px 44px}.nav-label{font-size:10px;letter-spacing:2px;color:#6f829c;margin:0 14px 12px}.nav-item{display:flex;align-items:center;gap:13px;padding:12px 14px;margin:5px 0;color:#98a8bd;border-radius:8px;font-size:13px}.nav-item:hover{background:#152130;color:white}.nav-item.active{background:#14303b;color:#83e4f7}.nav-item svg{width:18px;height:18px;flex-shrink:0}.nav-bottom{margin-top:auto}.side-node{border:1px solid var(--line);border-radius:10px;padding:14px;margin:20px 4px;color:#a9b7c9;font-size:12px}.dot{display:inline-block;width:6px;height:6px;background:var(--green);border-radius:100%;margin-right:7px}.main{margin-left:226px;padding:0 38px 30px;max-width:2000px}.topbar{height:78px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12px}.top-right{display:flex;align-items:center;gap:20px}.avatar{display:grid;place-items:center;width:31px;height:31px;border:1px solid #34505b;border-radius:50%;color:#97d7e5;background:#172730;font-size:12px}.page-heading{display:flex;justify-content:space-between;align-items:center;margin:28px 0 24px;gap:14px}h1{font-size:27px;letter-spacing:-.7px;line-height:1.35;margin:0 0 7px;font-weight:650}h2{font-size:15px;margin:0;font-weight:600}h3{font-size:13px;margin:0}.muted,.sub{color:var(--muted)}.sub{font-size:12px;margin:0}.eyebrow{font-size:10px;letter-spacing:2px;color:#6e869f;margin:0 0 7px}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #314054;color:#c9d5e6;background:#141e2b;border-radius:7px;padding:8px 13px;font-size:12px;white-space:nowrap}.button:hover{border-color:#69a6b8;background:#1a2b39}.button.primary{background:#83dcef;color:#082531;border-color:#83dcef;font-weight:650}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.stat{border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:18px 20px}.stat-top{display:flex;justify-content:space-between;align-items:center;color:#a4b3c5;font-size:12px}.stat-top svg{color:#65839b;width:17px;height:17px}.stat strong{display:block;font-size:30px;font-weight:600;line-height:1.4;margin:10px 0 4px;font-variant-numeric:tabular-nums;letter-spacing:-1px}.stat small{font-size:11px;color:var(--muted)}.panel{border:1px solid var(--line);border-radius:11px;background:var(--panel);overflow:hidden}.panel-head{display:flex;justify-content:space-between;align-items:center;padding:19px 22px;gap:12px}.panel-head a{font-size:12px;color:var(--accent)}.panel-body{padding:0 22px 20px}.grid{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr);gap:20px;margin-bottom:20px}.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:5px;font-size:10px;white-space:nowrap;background:#1b2937;color:#a8bed0;border:1px solid #2b3b4d}.pill.ok{color:#7cdeb8;background:#133128;border-color:#224b3d}.pill.warn{color:#ebc477;background:#312b1e;border-color:#50432a}.pill.bad{color:#f99595;background:#331f27;border-color:#523039}.chart{width:100%;height:176px;display:block}.chart text{font-family:inherit;fill:#8193aa;font-size:11px}.chart-note{display:flex;justify-content:space-between;padding:4px 4px 0;font-size:11px;color:var(--muted)}.resource{margin-bottom:16px}.resource-line{display:flex;justify-content:space-between;color:#9aabc0;font-size:12px;margin-bottom:8px}.resource-line b{color:#dbe6f4;font-weight:500;font-variant-numeric:tabular-nums}.track{height:5px;background:#263244;border-radius:4px;overflow:hidden}.track i{height:100%;display:block;background:#66c9df;border-radius:4px}.resource:nth-child(2) .track i{background:#9993e9}.resource:nth-child(3) .track i{background:#7db69c}.resource-foot{border-top:1px solid var(--line);padding-top:13px;margin-top:20px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}.bot-summary{display:flex;align-items:center;gap:12px;margin-bottom:22px}.bot-avatar{width:45px;height:45px;display:grid;place-items:center;border:1px solid #344054;border-radius:12px;background:#1d2538;color:#aba6ee}.bot-avatar svg{width:23px;height:23px}.kv{display:flex;justify-content:space-between;gap:20px;padding:10px 0;border-bottom:1px solid #1d2a3b;font-size:12px}.kv:last-child{border-bottom:0}.kv span{color:var(--muted)}.kv b{font-weight:500;text-align:right;overflow-wrap:anywhere;min-width:0}.service-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.service{padding:13px 10px;border:1px solid var(--line);border-radius:7px;font-size:11px}.service span{display:block;color:var(--muted);margin-bottom:8px}.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;text-align:left}th{color:#7f92aa;font-size:11px;font-weight:500;background:#111c2a}th,td{padding:13px 20px;border-bottom:1px solid #202c3c}td{color:#bdcadd}tbody tr:hover{background:#14202f}tbody tr:last-child td{border:0}td small{display:block;color:#768ba5;font-size:10px;margin-top:3px}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px}summary{cursor:pointer;color:var(--accent)}.details{white-space:normal;min-width:280px;max-width:380px;padding-top:10px;overflow-wrap:anywhere}.details .kv{display:block}.details .kv b{display:block;text-align:left}.table-footer{border-top:1px solid var(--line);padding:13px 20px;color:#7f92aa;font-size:11px;display:flex;justify-content:space-between}.empty{text-align:center;padding:46px 20px;color:var(--muted);white-space:normal}.empty b{display:block;color:#c0d0df;margin-bottom:8px}.footer{display:flex;justify-content:space-between;color:#586d86;font-size:10px;letter-spacing:1px;margin-top:25px}.search{background:#0d1521;border:1px solid #2c3c50;border-radius:6px;padding:8px 12px;color:var(--text);width:220px;font-size:12px;outline:none}.search:focus{border-color:var(--accent)}.notice{padding:12px 16px;border:1px solid #494030;background:#211f1a;border-radius:8px;color:#d3bc8c;font-size:12px;margin-bottom:20px}.wide{grid-column:1/-1}.login-page{min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr;background:radial-gradient(ellipse at 20% 60%,#102c3b 0,transparent 55%),#090e17}.login-story{position:relative;display:flex;flex-direction:column;justify-content:center;padding:10vw;border-right:1px solid var(--line);overflow:hidden}.login-story:before{content:\'\';width:570px;height:570px;border:1px solid #244454;border-radius:50%;position:absolute;left:-180px;bottom:-180px;box-shadow:0 0 0 75px #18323e40,0 0 0 150px #18323e20;pointer-events:none}.login-story .brand{padding:0;position:absolute;top:45px;left:50px}.login-story h1{font-size:50px;line-height:1.2;letter-spacing:-2px;margin:20px 0;position:relative}.login-story p{color:#91aabe;position:relative;max-width:320px}.login-form-area{display:grid;place-items:center;padding:40px}.login-card{max-width:370px;width:100%}.login-card h1{font-size:26px;margin:12px 0}.login-card label{display:block;font-size:12px;color:#a8b7ca;margin:23px 0 8px}.login-card input{width:100%;height:47px;padding:0 14px;border:1px solid #2c3b4e;border-radius:7px;color:#e6f3ff;background:#111b29;outline:none}.login-card input:focus{border-color:#65c6dd;box-shadow:0 0 0 3px #63d5ef15}.login-card input:-webkit-autofill{-webkit-text-fill-color:#e6f3ff;-webkit-box-shadow:0 0 0 1000px #111b29 inset}.login-card button{width:100%;padding:12px;margin-top:28px}.login-note{font-size:11px;color:#647c96;line-height:1.9;margin-top:25px}.login-back{display:block;color:#9aafc5;font-size:12px;margin-top:30px}.error{color:#ffb3b3;font-size:12px;margin-top:16px}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.mobile-brand{display:none}@media(min-width:1600px){.main{padding-left:50px;padding-right:50px}.chart{height:205px}.stat{padding:22px}}@media(max-width:1150px){.sidebar{width:194px}.main{margin-left:194px;padding:0 24px 24px}.grid{grid-template-columns:minmax(0,1.4fr) minmax(275px,1fr)}.stats{gap:10px}.stat{padding:15px}.stat strong{font-size:26px}}@media(max-width:900px){.grid{grid-template-columns:1fr}.sidebar{width:180px;padding:26px 10px}.main{margin-left:180px;padding:0 20px 20px}.stats{grid-template-columns:repeat(2,1fr)}.top-right time{display:none}.login-story{padding:7vw}.login-story h1{font-size:40px}}@media(max-width:650px){.sidebar{position:static;width:auto;padding:16px;display:block;border-right:0;border-bottom:1px solid var(--line)}.sidebar .brand{font-size:17px;padding:0}.brand-sub,.nav-label,.nav-bottom,.side-node{display:none}.sidebar nav{display:flex;gap:5px;margin-top:15px}.nav-item{margin:0;font-size:12px;padding:9px 10px}.nav-item svg{width:15px;height:15px}.main{margin-left:0;padding:0 16px 24px}.topbar{height:52px}.page-heading{margin:22px 0 19px;align-items:flex-start;flex-wrap:wrap}h1{font-size:24px}.stats{gap:10px}.stat{padding:14px}.stat strong{font-size:28px}.grid{gap:16px;margin-bottom:16px}.panel-head{padding:16px}.panel-body{padding:0 16px 16px}.footer{letter-spacing:0;gap:10px}.login-page{grid-template-columns:1fr}.login-story{min-height:230px;border:0;padding:85px 30px 25px}.login-story .brand{top:25px;left:30px}.login-story h1{font-size:32px;margin:0}.login-story p{margin-bottom:0}.login-story .eyebrow{display:none}.login-form-area{padding:35px 30px 50px}.search{width:100%}.toolbar{width:100%}.chart{height:140px}.chart text{font-size:19px}.table-footer{gap:12px}.top-right{gap:10px}.service-grid{gap:7px}}\n</style></head><body class="login-page"><section class="login-story"><a class="brand" href="/">CEYLAN<span>CLC</span></a><div class="eyebrow">ENGINEERING LAB / ADMIN</div><h1>每个系统，<br>尽在掌握。</h1><p>从网站访客到弹性机器人。<br>在一个工作空间里，了解系统的每一次变化。</p></section><section class="login-form-area"><form class="login-card" method="post"><div class="eyebrow">WELCOME BACK</div><h1>登录控制台</h1><p class="sub">使用管理员账号进入 CeylanCLC 工作空间</p><label for="username">用户名</label><input id="username" name="username" autocomplete="username" required placeholder="输入管理员用户名"><label for="password">密码</label><input id="password" type="password" name="password" autocomplete="current-password" required placeholder="输入密码"><button class="button primary" type="submit">进入控制台\u3000 →</button>{% if error %}<div class="error" role="alert">{{error}}</div>{% endif %}<p class="login-note">仅限管理员访问。访客记录和位置数据受登录保护。</p><a href="/" class="login-back">← 返回 CeylanCLC 网站</a></form></section></body></html>'
@@ -532,6 +680,37 @@ def admin_login():
                 "ceylan_admin"
             ] = True
 
+            session["ceylan_role"] = "admin"
+
+            session.permanent = True
+
+            return redirect(
+                url_for(
+                    "admin_root"
+                )
+            )
+
+        if (
+            OBSERVER_USER
+            and OBSERVER_HASH
+            and username == OBSERVER_USER
+            and check_password_hash(
+                OBSERVER_HASH,
+                password
+            )
+        ):
+
+            LOGIN_FAILURES.pop(
+                ip,
+                None
+            )
+
+            session.clear()
+
+            # 读接口全都查 ceylan_admin；写操作由 _observer_readonly_gate 拦。
+            session["ceylan_admin"] = True
+            session["ceylan_role"] = "observer"
+
             session.permanent = True
 
             return redirect(
@@ -580,9 +759,33 @@ def admin_logout():
 
 
 
-@app.route("/admin")
+@app.route("/admin", strict_slashes=False)
 @admin_required
 def admin_root():
+    # 统一控制台：与 /admin/dashboard 同一个新前端
+    from pathlib import Path
+    page = Path(__file__).parent / "console.html"
+    if page.exists():
+        html = page.read_text(encoding="utf-8")
+        # 静态资源版本号：console.css/js 改了就换 URL，浏览器不会用旧缓存
+        try:
+            _sd = Path(__file__).parent / "static"
+            _ver = 1
+            for _n in ("console.css", "console.js"):
+                _f = _sd / _n
+                if _f.exists():
+                    _ver = max(_ver, int(_f.stat().st_mtime))
+            html = html.replace("{{ASSET_VER}}", str(_ver))
+        except Exception:
+            html = html.replace("{{ASSET_VER}}", "1")
+        return html
+    return render_console('overview', OVERVIEW_TEMPLATE, bot=get_bot_status(), detailed=False, **console_data())
+
+
+@app.route("/admin/legacy")
+@admin_required
+def admin_legacy():
+    '''旧版控制台，保留作备用。'''
     return render_console('overview', OVERVIEW_TEMPLATE, bot=get_bot_status(), detailed=False, **console_data())
 
 
@@ -927,6 +1130,57 @@ def parse_client_ua(ua):
     }
 
 
+@app.route("/admin/api/visits")
+@admin_required
+def api_visits():
+    """访客统计的 JSON 版，供新控制台前端使用。"""
+    try:
+        data = console_data(limit=40)
+        trend = data.get("trend") or {}
+        rows = []
+        for r in (data.get("rows") or []):
+            rows.append({
+                "time": r.get("time_cn") or r.get("ts") or "",
+                "ip": r.get("ip") or "",
+                "path": r.get("path") or "",
+                "ua": r.get("client_type") or "",
+                "bot": r.get("bot_name") or "",
+                "location": r.get("location") or "",
+            })
+        plot = trend.get("plot") or []
+        st = data.get("stats") or {}
+        # 「访客统计到底在数什么」以前只能猜，而且猜错了：面板写「后台不记」，
+        # 实际现网 1000 条里 628 条是 /admin*。现在口径和代码是同一份（visit_log）。
+        since = st.get("lifetime_since") or ""
+        return jsonify({"ok": True, "stats": dict(st),
+                        "trend": {"values": [p.get("value") for p in plot],
+                                  "labels": [p.get("label") for p in plot],
+                                  "dates": [p.get("date") for p in plot],
+                                  "peak": trend.get("peak", 0),
+                                  "total": trend.get("total", 0)},
+                        "meta": {"window_days": 7,
+                                 "retention_days": RETENTION_DAYS,
+                                 "dedupe_seconds": 60,
+                                 "counts": ("一条 = 一次公开页面的 GET 请求；"
+                                            "后台自己、接口、静态资源都不算访客；"
+                                            "同一 IP + 同一页面 60 秒内只记一条；"
+                                            "里面包含爬虫和互联网扫描器"),
+                                 "lifetime": ("累计 %s 次，从 %s 开始记"
+                                              % (st.get("lifetime", 0), since)
+                                              if since else "还没有记录"),
+                                 "stored": "明细留最近 %d 天：公开页面 %s 条；"
+                                           "另有 %s 条是后台自己、接口与静态资源，"
+                                           "不计入访客，累计也不含它们"
+                                           % (RETENTION_DAYS, st.get("total", 0),
+                                              st.get("ignored", 0)),
+                                 "unique_ips": "近 %d 天内出现过的不同 IP 数，不是「人数」"
+                                               % RETENTION_DAYS,
+                                 "today": "滚动 24 小时，不是自然日",
+                                 "locations": "访客在网站上主动共享过位置的记录数"},
+                        "rows": rows})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:150]})
+
 @app.route("/admin/visitors")
 @admin_required
 def admin_visitors():
@@ -1021,7 +1275,7 @@ import hmac
 import math
 import tempfile
 
-BOT_STATUS_FILE = os.environ.get('CEYLAN_BOT_STATUS_FILE', '/var/lib/ceylan-status/bot_status.json')
+BOT_STATUS_FILE = os.environ.get('CEYLAN_BOT_STATUS_FILE', './data/bot_status.json')
 BOT_STALE_SECONDS = 180
 
 def get_bot_status():
@@ -1116,6 +1370,10 @@ def receive_bot_status():
 
 @app.after_request
 def protect_admin_response(response):
+    # 静态资源（console.css/js）例外：它们本来就该被浏览器缓存。
+    # 强行 no-store 会让「拆分资源」白做——每次打开面板还是重下 95KB。
+    if request.path.startswith('/admin/assets/'):
+        return response
     if request.path.startswith('/admin') or request.path == '/api/bot/status':
         response.headers['Cache-Control'] = 'no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -1128,16 +1386,31 @@ def console_data(limit=6):
     cutoff = (now - timedelta(days=RETENTION_DAYS)).isoformat()
     conn = db()
     try:
+        # 明细里还留着历史上把后台自己算成访客的那几百条：读的时候按同一个口径剔掉，
+        # 不删数据（原始访问日志仍然可查），但面板上的每个数字都只数公开页面。
         stats = dict(conn.execute('''SELECT COUNT(*) AS total, COUNT(DISTINCT ip) AS unique_ips,
             COALESCE(SUM(location_shared=1),0) AS locations,
-            COALESCE(SUM(ts>=?),0) AS today FROM visits WHERE ts>=?''',
-            ((now-timedelta(hours=24)).isoformat(), cutoff)).fetchone())
-        raw = conn.execute('SELECT * FROM visits WHERE ts>=? ORDER BY id DESC LIMIT ?', (cutoff, limit)).fetchall()
+            COALESCE(SUM(ts>=?),0) AS today FROM visits WHERE ts>=? AND %s''' % visit_log.PUBLIC_SQL,
+            ((now-timedelta(hours=24)).isoformat(), cutoff) + visit_log.PUBLIC_PARAMS).fetchone())
+        # 「累计」不能数 visits 的行数：那张表按保留期删行，数字涨到窗口满就再也不动。
+        # 计数器在 visit_days 里，只加不删，所以它才是累计。
+        life_total, life_first, life_last = visit_log.lifetime(conn)
+        stats["lifetime"] = life_total
+        stats["lifetime_since"] = life_first
+        stats["lifetime_until"] = life_last
+        # 明细表里还留着历史上把后台自己算成访客的那些行。不删（原始访问日志仍然可查），
+        # 但也不能让「明细 1003 条」和「累计 348 次」并排出现却不解释差在哪。
+        stats["ignored"] = conn.execute(
+            'SELECT COUNT(*) FROM visits WHERE ts>=? AND NOT %s' % visit_log.PUBLIC_SQL,
+            (cutoff,) + visit_log.PUBLIC_PARAMS).fetchone()[0]
+        raw = conn.execute('SELECT * FROM visits WHERE ts>=? AND %s ORDER BY id DESC LIMIT ?'
+                           % visit_log.PUBLIC_SQL,
+                           (cutoff,) + visit_log.PUBLIC_PARAMS + (limit,)).fetchall()
         zone = ZoneInfo('Asia/Shanghai')
         today = now.astimezone(zone).date()
         first = today - timedelta(days=6)
-        start = datetime.combine(first, datetime.min.time(), tzinfo=zone).astimezone(timezone.utc).isoformat()
-        counts = {r['day']: r['n'] for r in conn.execute("SELECT date(ts,'+8 hours') AS day, COUNT(*) AS n FROM visits WHERE ts>=? GROUP BY day", (start,))}
+        days = [(first + timedelta(days=i)).isoformat() for i in range(7)]
+        values = visit_log.series(conn, days)
     finally:
         conn.close()
     rows = []
@@ -1150,7 +1423,6 @@ def console_data(limit=6):
         row.update(parse_client_ua(row.get('ua')))
         rows.append(row)
     plot = []
-    values = [counts.get((first+timedelta(days=i)).isoformat(), 0) for i in range(7)]
     peak = max(values, default=0)
     for i, value in enumerate(values):
         date = first + timedelta(days=i)
@@ -1216,6 +1488,13 @@ BOT_TEMPLATE = (BOT_TEMPLATE
     .replace('腾讯云 · 机器人节点', '{{bot_node_label}}'))
 
 # V2 extensions reuse the existing Flask instance and administrator session.
+# 共享契约模块只有一份，在 bot/ 下；把 bot/ 追加到 sys.path 末尾，
+# 使 website/ 自己的同名模块（project_config）仍优先解析。
+import sys as _sys
+_BOT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bot")
+if os.path.isdir(_BOT_DIR) and _BOT_DIR not in _sys.path:
+    _sys.path.append(_BOT_DIR)
+
 from ceylan_extensions import install as _install_ceylan_extensions
 _install_ceylan_extensions(app, globals())
 
@@ -1230,3 +1509,11 @@ _install_keys_v5(app, globals())
 
 from ceylan_fun_web import install as _install_fun_v6
 _install_fun_v6(app, globals())
+
+from ceylan_dashboard import install as _install_dashboard
+_install_dashboard(app, globals())
+
+# 首次运行「快速配置向导」：仅在未完成初始化时激活（data/.setup_complete 门控），
+# 已配置的生产部署里完全惰性。见 website/setup_wizard.py。
+from setup_wizard import install as _install_setup_wizard
+_install_setup_wizard(app)

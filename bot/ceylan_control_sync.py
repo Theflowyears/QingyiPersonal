@@ -9,12 +9,12 @@ from urllib.error import HTTPError
 from ceylan_control_core import validate
 from project_config import api_url
 
-ROOT=Path(os.getenv('CEYLAN_CONTROL_DIR','/root/openclaw-qq/control-v4'))
+ROOT=Path(os.getenv('CEYLAN_CONTROL_DIR','./data/control-v4'))
 
 def main():
     p=ROOT/'state.json';state=None
     if p.exists() and p.stat().st_size<=1000000:
-        state=json.loads(p.read_text())
+        state=json.loads(p.read_text(encoding='utf-8'))
     token=os.environ['CEYLAN_BOT_TOKEN']
     class NoRedirect(HTTPRedirectHandler):
         def redirect_request(self,*a,**kw):return None

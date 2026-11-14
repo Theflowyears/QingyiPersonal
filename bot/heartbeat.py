@@ -27,7 +27,7 @@ def state(args):
 def config():
     path=Path(os.getenv('CEYLAN_OPENCLAW_CONFIG','/home/ubuntu/.openclaw/openclaw.json'))
     try:
-        obj=json.loads(path.read_text())
+        obj=json.loads(path.read_text(encoding='utf-8'))
         model=obj.get('agents',{}).get('defaults',{}).get('model',{})
         if isinstance(model,dict):model=model.get('primary')
         return obj.get('gateway',{}).get('port',31075),model
@@ -42,7 +42,7 @@ async def onebot():
     if not token:
         try:
             configured=os.getenv('CEYLAN_ONEBOT_CONFIG','').strip()
-            candidates=[configured] if configured else sorted(glob('/root/openclaw-qq/napcat/config/onebot11_*.json'))
+            candidates=[configured] if configured else sorted(glob('./data/napcat/config/onebot11_*.json'))
             cfg=json.loads(Path(candidates[0]).read_text()) if candidates else {}
             for s in cfg.get('network',{}).get('websocketServers',[]):
                 if s.get('enable') and int(s.get('port',0))==(parsed.port or 80):
@@ -84,9 +84,9 @@ def collect():
     try:data.update(asyncio.run(onebot()))
     except Exception:pass  # No result means unknown, never a fabricated online=true.
     try:
-        p=Path(os.getenv('CEYLAN_BOT_SNAPSHOT','/root/openclaw-qq/runtime-status.json'))
+        p=Path(os.getenv('CEYLAN_BOT_SNAPSHOT','./data/runtime-status.json'))
         if data['bridge']=='online' and 0<=time.time()-p.stat().st_mtime<=60:
-            snapshot=json.loads(p.read_text())
+            snapshot=json.loads(p.read_text(encoding='utf-8'))
             for k in ('memory','memory_count','patrol','last_message','last_patrol'):
                 if snapshot.get(k) is not None:data[k]=snapshot[k]
     except (OSError,ValueError,AttributeError):pass

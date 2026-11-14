@@ -23,3 +23,25 @@ napcat/
 ntqq/
 share/*
 !share/.gitkeep
+/data/phase2_reference/
+
+# ── 接手维护期补全（2026-11-14）──
+# 本地 data/ 是云端过期副本：含 models_config.json 密钥与个人关系数据，绝不入库
+/data/
+# config.env 历史备份（含全套密钥）
+.config.env.history/
+# 世界书等派生缓存
+.cache/
+# 桌宠：代码入库，143MB 精灵图与运行状态留本地
+desktop/assets/
+desktop/state/
+
+# 运行时记忆日志（含会话键，不入库）
+memory/
+
+# 含人格原文的导出件永不入库
+*规则原文前后*.json
+*规则审计与前后对照*.json
+
+# CLI 本地状态目录永不入库
+.local/

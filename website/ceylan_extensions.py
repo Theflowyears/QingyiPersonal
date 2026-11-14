@@ -19,7 +19,7 @@ def install(app, base):
     if app.extensions.get('ceylan_v2'):
         return
     app.extensions['ceylan_v2'] = True
-    path = os.environ.get('CEYLAN_CLIPBOARD_DB', '/var/lib/ceylan-status/clipboard.db')
+    path = os.environ.get('CEYLAN_CLIPBOARD_DB', './data/clipboard.db')
 
     @contextmanager
     def database():
@@ -134,6 +134,10 @@ def install(app, base):
 
     @app.after_request
     def feature_headers(response):
+        # 静态资源例外：console.css/js 需要被浏览器缓存，
+        # 否则「拆分资源」等于白拆，每次打开面板还是重下 95KB。
+        if request.path.startswith('/admin/assets/'):
+            return response
         if request.path.startswith('/admin') or request.path == '/api/bot/public':
             response.headers['Cache-Control'] = 'no-store'
         if request.path.startswith('/admin/api/clipboard'):

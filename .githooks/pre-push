@@ -1,0 +1,19 @@
+#!/bin/sh
+# 护栏：本项目永不推送到上游原仓库 CeylanCLC/agent-qq-sandbox-bot。
+# 维护方的改动只发到自己的仓库（git remote add mine <URL> && git push mine <branch>）。
+#
+# 本文件是版本化副本；真正生效的是 .git/hooks/pre-push。
+# 重新安装：cp .githooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+REMOTE_URL="$2"
+case "$REMOTE_URL" in
+  *CeylanCLC/agent-qq-sandbox-bot*|*github.com/CeylanCLC*)
+    echo "" >&2
+    echo "[pre-push 已拦截] 目标是上游原仓库：$REMOTE_URL" >&2
+    echo "本项目的改动不得推送到原仓库。请推送到自己的远端，例如：" >&2
+    echo "    git remote add mine <你自己的仓库URL>" >&2
+    echo "    git push mine <branch>" >&2
+    echo "确认无误仍要推送上游（不建议）：git push --no-verify ..." >&2
+    exit 1
+    ;;
+esac
+exit 0

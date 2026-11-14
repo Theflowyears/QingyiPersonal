@@ -1,59 +1,64 @@
-# 快速上手
+# 快速上手（QingyiPersonal · 公开白板版）
 
-## 1. 先确认现有链路
+> 本仓库是**平台白板**：不含任何预设人格。角色卡（性格/形象/称呼）由部署方放在
+> `DATA_DIR/personas/`，见 README「人格包约定」。下面只讲怎么把平台跑起来。
 
-部署前至少应确认：NapCat 已登录、OneBot WebSocket 仅监听本机或受控网络、OpenClaw Gateway 可访问。不要为了安装本项目重新安装一个已经正常工作的 NapCat 或 OpenClaw。
-
-## 2. 安装机器人文件
-
-```bash
-git clone https://github.com/CeylanCLC/agent-qq-sandbox-bot.git
-cd agent-qq-sandbox-bot
-sudo python3 deploy/install.py bot --target /opt/qq-openclaw-bot --venv
-```
-
-安装器会先备份非空目标目录。它不会创建密钥，也不会修改 NapCat 或 OpenClaw 配置。
-
-## 3. 创建配置
+## 一条命令
 
 ```bash
-sudo cp examples/bot.env.example /etc/qq-openclaw-bot.env
-sudo chmod 600 /etc/qq-openclaw-bot.env
-sudoedit /etc/qq-openclaw-bot.env
+git clone https://github.com/Theflowyears/QingyiPersonal.git
+cd QingyiPersonal
+python setup.py --napcat --start
 ```
 
-至少填写 `BOT_DISPLAY_NAME`、`BOT_TRIGGER_WORDS`、`ONEBOT_WS`、`OPENCLAW_URL` 和 `OPENCLAW_GATEWAY_TOKEN`。需要群黑名单时填写 `BLOCKED_GROUP_IDS`；不要把真实值提交到 Git。
+`setup.py` 会依次：
 
-## 4. 前台测试
+1. 建 venv 并安装依赖（`requirements.txt`）
+2. 生成 `config.env`：随机面板密钥 + 管理员凭据（**只打印一次，请记好**）；模型 API key 留空，交给面板填
+3. `--napcat`：创建 NapCat 容器（**固定 MAC**，设备指纹稳定）。容器已存在时**绝不重启/重建**，保护 QQ 登录态
+4. `--start`：后台拉起 `launcher.py`（bot + web 面板）
+
+结束时打印面板地址与管理员凭据。常用开关：
+
+| 开关 | 作用 |
+|---|---|
+| `--napcat` | 顺带创建 NapCat 容器（需 docker） |
+| `--start` | 生成后后台启动 |
+| `--no-venv` | 不建 venv，用当前解释器 |
+| `--port N` | 面板端口（默认 5000） |
+| `--admin-user / --admin-password` | 指定管理员凭据（默认随机密码） |
+| `--mark-complete` | 直接标记初始化完成、跳过向导（生产式部署，向导置惰性） |
+
+## 打开面板，走「快速配置向导」
+
+浏览器打开 `http://127.0.0.1:5000/admin/login`，用 setup 打印的管理员凭据登录，
+然后进入 **`/setup`** 向导，三步：
+
+1. **模型 API** —— 填文本通道（必需）的 `base_url / 模型 / API key`，点「测试连接」实时验证；
+   视觉/摘要/长文可留空。保存写入 `config.env`，**文本/视觉通道需重启 bot 生效**（向导提供受控重启）。
+2. **QQ 登录** —— 显示 NapCat 状态与登录二维码，用 QQ 扫码；每 3 秒自动刷新。
+3. **后台状态** —— 查看服务健康；确认后点「完成初始化」。
+
+完成后向导自动关闭（落 `data/.setup_complete` 标记），改用常规面板 `/admin/dashboard`。
+**已完成的部署里向导完全惰性**——写配置/测试/重启等接口一律拒绝，不影响正常运行。
+
+## 手动 / 进阶
+
+不想用向导，也可以直接编辑 `config.env`（参考 `.env.example`），再 `python launcher.py`。
+参数优先级：`data/control-v4/settings.json`（面板热改）> `config.env` > 代码默认。
+
+生产建议用 systemd 托管 `launcher.py`（`WorkingDirectory=` 仓库目录），面板经 nginx/HTTPS 对外。
+模型通道、图像/语音、监控账单等全部键位见 `.env.example` 与 [配置参考](docs/CONFIGURATION.md)。
+
+## 红线（务必遵守）
+
+- **永不自动重启/重建 NapCat 容器**：QQ 登录态与设备指纹的稳定性高于一切；`setup.py` 对已存在容器只报告不动作。
+- **不删不覆盖用户数据**：`config.env` 已存在时 setup 不覆盖；改数据先备份。
+- **密钥不进仓库**：`config.env`、`data/`、`memory/` 均已 gitignore；向导只把 key 写进本机 `config.env`，绝不回显/记录。
+- **人格是数据不是代码**：具体角色内容放 `DATA_DIR/personas/`，不写进平台代码或公开仓库。
+
+## 测试
 
 ```bash
-set -a; . /etc/qq-openclaw-bot.env; set +a
-/opt/qq-openclaw-bot/venv/bin/python /opt/qq-openclaw-bot/qq_openclaw_bridge.py
+python tests/run_all.py     # 全量隔离测试，无需任何真实凭据
 ```
-
-在测试群 @ 机器人，确认文本和图片链路。按 `Ctrl+C` 停止。
-
-## 5. systemd
-
-```bash
-sudo cp bot/qq-openclaw-bridge.service.example /etc/systemd/system/qq-openclaw-bridge.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now qq-openclaw-bridge.service
-sudo systemctl status qq-openclaw-bridge.service --no-pager -l
-```
-
-示例单元默认路径是 `/opt/qq-openclaw-bot`。使用其他路径时先编辑单元文件。
-
-## 6. 可选 Web 控制台
-
-控制台是参考实现，适合并入已有 Flask 管理后台。全新独立部署可运行：
-
-```bash
-sudo python3 deploy/install.py website --target /opt/qq-bot-console
-python3 -m venv /opt/qq-bot-console/venv
-/opt/qq-bot-console/venv/bin/pip install -r /opt/qq-bot-console/requirements.txt
-```
-
-若目标目录已有 `app.py`，安装器会拒绝覆盖；请按 [迁移指南](docs/MIGRATION.md) 增量合并。
-
-控制台接入后，在两端使用同一个随机 `CEYLAN_BOT_TOKEN`，并在机器人端设置 `BOT_CONTROL_BASE_URL=https://你的域名`。不要把 Markdown 链接语法写进 URL。

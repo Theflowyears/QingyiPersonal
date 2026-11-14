@@ -16,7 +16,7 @@ HOURS = {}
 GROUPS = {}
 ACTIVE = 0
 LATENCIES = deque(maxlen=100)
-PATH = Path(os.getenv('CEYLAN_OBSERVER_FILE', '/root/openclaw-qq/observer-status.json'))
+PATH = Path(os.getenv('CEYLAN_OBSERVER_FILE', './data/observer-status.json'))
 
 def log(kind, status, group=None, duration=None):
     EVENTS.append({'time':time.time(),'kind':kind,'status':status,'group':group,'duration':duration})

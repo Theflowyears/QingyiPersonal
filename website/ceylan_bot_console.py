@@ -68,7 +68,7 @@ def clean(data):
 def install(app,base):
     if app.extensions.get('ceylan_monitor'):return
     app.extensions['ceylan_monitor']=True
-    dbpath=os.getenv('CEYLAN_TELEMETRY_DB','/var/lib/ceylan-status/bot_telemetry.db')
+    dbpath=os.getenv('CEYLAN_TELEMETRY_DB','./data/bot_telemetry.db')
     @contextmanager
     def connect():
         c=sqlite3.connect(dbpath,timeout=5)
@@ -117,5 +117,5 @@ def install(app,base):
         return response
     @base['admin_required']
     def page():
-        return base['render_console']('bot',(ROOT/'bot-console.html').read_text(),bot=base['get_bot_status']())
+        return base['render_console']('bot',(ROOT/'bot-console.html').read_text(encoding='utf-8'),bot=base['get_bot_status']())
     app.view_functions['admin_bot']=page

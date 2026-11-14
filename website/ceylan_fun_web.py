@@ -14,6 +14,8 @@ from flask import jsonify, request, session
 from ceylan_fun_core import revision, validate_settings
 
 ROOT = Path(__file__).resolve().parent
+# 本地文件桥：bot 每20秒把互动快照写到 fun-v6/state.json，命令从 inbox/ 取。
+FUN_STATE_DIR = Path(os.getenv('CEYLAN_FUN_DIR', './data/fun-v6'))
 COUNTERS = {'messages','group_messages','private_messages','images','model_calls','model_ok','model_errors',
             'patrol_model_calls','patrol_skipped_quiet','patrol_skipped_limit','sent_replies','sent_chars','easter_hits'}
 
@@ -71,14 +73,67 @@ def clean_state(data):
     return clean
 
 
+def _read_local_fun_state():
+    p = FUN_STATE_DIR / 'state.json'
+    if not p.exists():
+        return None
+    try:
+        st = json.loads(p.read_text(encoding='utf-8'))
+    except (ValueError, OSError):
+        return None
+    if isinstance(st, dict) and 0 <= time.time() - st.get('sampled', 0) < 100:
+        try:
+            return clean_state(st)
+        except (ValueError, TypeError, KeyError):
+            return None
+    return None
+
+
+def _read_local_fun_ledger():
+    p = FUN_STATE_DIR / 'ledger.json'
+    if not p.exists():
+        return []
+    try:
+        led = json.loads(p.read_text(encoding='utf-8'))
+    except (ValueError, OSError):
+        return []
+    ops = [{'id': ident, 'created': rec.get('time', 0),
+            'status': rec.get('status', ''), 'message': rec.get('message', '')}
+           for ident, rec in led.items()]
+    return list(reversed(sorted(ops, key=lambda x: x['created'])))[:30]
+
+
+def _write_local_fun_command(payload):
+    inbox = FUN_STATE_DIR / 'inbox'
+    inbox.mkdir(parents=True, exist_ok=True)
+    ident = secrets.token_hex(16)
+    now = time.time()
+    cmd = dict(payload)
+    cmd['id'] = ident
+    cmd['expires'] = now + 900
+    tmp = inbox / ('.tmp-' + ident)
+    tmp.write_text(json.dumps(cmd, ensure_ascii=False), encoding='utf-8')
+    tmp.replace(inbox / (ident + '.json'))
+    return ident
+
+
 def install(app, base):
     if app.extensions.get('fun_v6'): return
     app.extensions['fun_v6'] = True
-    dbpath = Path(os.getenv('CEYLAN_FUN_DB', '/var/lib/ceylan-status/bot_fun.db'))
+    dbpath = Path(os.getenv('CEYLAN_FUN_DB', './data/bot_fun.db'))
 
     @contextmanager
     def db():
-        fd = os.open(dbpath, os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW, 0o600); os.fchmod(fd,0o600); os.close(fd)
+        try:
+            _flags = os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0)
+            fd = os.open(dbpath, _flags, 0o600)
+            try:
+                os.fchmod(fd, 0o600)
+            except (AttributeError, OSError):
+                pass
+            os.close(fd)
+        except (AttributeError, OSError):
+            pass
         conn = sqlite3.connect(dbpath, timeout=8); conn.row_factory = sqlite3.Row
         try:
             conn.execute('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), received REAL, body TEXT)')
@@ -124,7 +179,7 @@ def install(app, base):
         return jsonify(ok=True,commands=commands)
 
     def telemetry():
-        path=Path(os.getenv('CEYLAN_TELEMETRY_DB','/var/lib/ceylan-status/bot_telemetry.db'))
+        path=Path(os.getenv('CEYLAN_TELEMETRY_DB','./data/bot_telemetry.db'))
         if not path.is_file(): return None,{}
         conn=None
         try:
@@ -163,7 +218,7 @@ def install(app, base):
     @base['admin_required']
     def page():
         session.setdefault('fun_csrf',secrets.token_urlsafe(32))
-        return base['render_console']('bot',(ROOT/'bot-play.html').read_text(),csrf=session['fun_csrf'])
+        return base['render_console']('bot',(ROOT/'bot-play.html').read_text(encoding='utf-8'),csrf=session['fun_csrf'])
 
     @app.get('/admin/api/bot/play', endpoint='fun_v6_status')
     def status():
@@ -173,6 +228,14 @@ def install(app, base):
             ops=[dict(x) for x in conn.execute('SELECT id,created,status,message FROM ops ORDER BY created DESC LIMIT 30')]
         state=json.loads(row['body']) if row else None
         fresh=bool(row and state and 0<=time.time()-row['received']<100 and 0<=time.time()-state['sampled']<100)
+
+        # —— 本地文件桥回退：同机部署时直接读 bot 写的 fun-v6/state.json，无需 https sync ——
+        if not fresh:
+            local_state = _read_local_fun_state()
+            if local_state is not None:
+                state = local_state
+                fresh = True
+                ops = _read_local_fun_ledger()
         tele,names=telemetry()
         if state:
             for group in state['groups']:group['name']=names.get(group['id'])
@@ -188,6 +251,17 @@ def install(app, base):
             rev=data.get('revision')
             if not isinstance(rev,str) or len(rev)!=64:raise ValueError('设置版本无效')
         except (ValueError,TypeError) as exc:return fail(str(exc),400)
+
+        # —— 本地文件桥：SQLite 无状态时用 bot 写的 state.json 校验，命令投递到 inbox/ ——
+        local_state = _read_local_fun_state()
+        if local_state is not None:
+            if rev != local_state['settings_revision']:
+                return fail('设置已变化，请刷新后重试', 409)
+            command = {'id': secrets.token_hex(16), 'action': 'settings',
+                       'revision': rev, 'settings': settings}
+            ident = _write_local_fun_command(command)
+            return jsonify(ok=True, id=ident), 202
+
         with db() as conn:
             conn.execute('BEGIN IMMEDIATE');cleanup(conn);row=conn.execute('SELECT * FROM state WHERE id=1').fetchone()
             if not row:return fail('等待机器人接入互动通道',409)
